@@ -61,8 +61,10 @@ def train(args):
     dataloader_synth_train, dataloader_synth_val = get_train_val_loaders(
         args.source_domain_dir, data_transforms, train_size=0.8
     )
+
+    num_train_samples = len(dataloader_synth_train.dataset)
     dataloader_dealer_train, dataloader_dealer_val = get_train_val_loaders(
-        args.target_domain_dir, data_transforms, train_size=0.8
+        args.target_domain_dir, data_transforms, train_size=0.8, num_train_samples=num_train_samples
     )
 
     # TODO: Do I need to check whether param.requires_grad == True?

@@ -17,9 +17,8 @@ class DaimlerImageFolder(datasets.ImageFolder):
 
 
 def get_train_val_loaders(
-    data_dir, data_transforms, train_size=0.8, batch_size_train=32, batch_size_val=1000
+    data_dir, data_transforms, train_size=0.8, batch_size_train=32, batch_size_val=1000, num_train_samples=None
 ):
-    # TODO: Add calculation for num_samples of target domain
     dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
 
     # Split into train and val
@@ -50,9 +49,13 @@ def get_train_val_loaders(
     # One weight for each sample, based on the sample's label 
     sample_weights = weights[dataset_train_labels]
 
-    num_samples = len(dataset_train)
+    # If the target domain dataset is much smaller we can pass the number of
+    # training samples to sample directly
+    if num_train_samples is None:
+        num_train_samples = len(dataset_train)
+
     sampler = torch.utils.data.WeightedRandomSampler(
-        sample_weights, num_samples, generator=torch.Generator().manual_seed(0)
+        sample_weights, num_train_samples, generator=torch.Generator().manual_seed(0)
     )
     dataloader_train = torch.utils.data.DataLoader(
         dataset_train, batch_size=batch_size_train, sampler=sampler
