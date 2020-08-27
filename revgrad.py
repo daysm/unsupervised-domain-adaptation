@@ -4,6 +4,8 @@ from torch.autograd import Function
 
 
 class GradientReversal(Function):
+
+    # TODO: Optimize alpha?
     @staticmethod
     def forward(ctx, input_, alpha=torch.tensor(1.0)):
         ctx.save_for_backward(input_, alpha)
@@ -17,7 +19,6 @@ class GradientReversal(Function):
 
         # Only compute if input needs gradient, otherwise return None
         if ctx.needs_input_grad[0]:
-            # print(grad_output)
             grad_input = grad_output.neg() * alpha
         return grad_input, None
 

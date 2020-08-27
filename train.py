@@ -43,7 +43,7 @@ def save_model(model, model_dir):
 
 
 def train(args):
-    model = ResNet18(dann=args.dann, freeze_feature_extractor=False)
+    model = ResNet18(dann=True if args.mode == 'dann' else False, freeze_feature_extractor=False)
     model = model.to(device)
 
     input_size = 224

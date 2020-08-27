@@ -21,6 +21,8 @@ def get_train_val_loaders(
 ):
     # TODO: Add calculation for num_samples of target domain
     dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
+
+    # Split into train and val
     len_train, len_val = (
         int(np.floor(len(dataset) * train_size)),
         int(np.ceil(len(dataset) * (1 - train_size))),
@@ -28,12 +30,8 @@ def get_train_val_loaders(
     dataset_train, dataset_val = torch.utils.data.random_split(
         dataset, [len_train, len_val], generator=torch.Generator().manual_seed(0)
     )
-    class_count = {
-        target: dataset.targets.count(target) for target in set(dataset.targets)
-    }
-    class_count_readable = {
-        class_name: class_count[idx] for class_name, idx in dataset.class_to_idx.items()
-    }
+
+    # Count class frequencies in training set
     dataset_train_labels = [dataset.targets[i] for i in dataset_train.indices]
     class_count_train = {
         target: dataset_train_labels.count(target)
@@ -42,9 +40,16 @@ def get_train_val_loaders(
     class_count_train = [
         class_count_train[class_idx] for class_idx in sorted(class_count_train.keys())
     ]
+
+    # One weight for each class
     weights = 1.0 / torch.tensor(class_count_train).float()
+    
+    # Convert to to make compatible with weights
     dataset_train_labels = torch.LongTensor(dataset_train_labels)
+    
+    # One weight for each sample, based on the sample's label 
     sample_weights = weights[dataset_train_labels]
+
     num_samples = len(dataset_train)
     sampler = torch.utils.data.WeightedRandomSampler(
         sample_weights, num_samples, generator=torch.Generator().manual_seed(0)
