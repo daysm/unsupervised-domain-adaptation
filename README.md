@@ -11,6 +11,18 @@ A domain-adversarial neural network consists of a feature extractor, a label cla
 
 ![](figures/dann-architecture.png)
 
+## Getting started (locally)
+
+0. Clone `git clone git@github.wdf.sap.corp:D073679/unsupervised-domain-adaptation.git`
+0. Change into repo `cd unsupervised-domain-adaptation`
+0. Install dependencies `pip install -r requirements.txt`
+0. Create a directory `mkdir data` at the root of the repo
+0. Download `synthetic_new_for_model_classification_fixed_cropped` and `real_new_for_model_classification_cropped_cleaned` from S3 to the `data` directory
+0. Train `python train.py --source-domain-dir data/synthetic_new_for_model_classification_fixed_cropped --target-domain-dir data/real_new_for_model_classification_cropped_cleaned`
+
+## Getting started (SageMaker)
+See `demo.ipynb`
+
 
 ## References
 * [Unsupervised Domain Adaptation by Backpropagation](https://arxiv.org/abs/1409.7495)

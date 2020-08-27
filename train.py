@@ -29,6 +29,7 @@ torch.manual_seed(0)
 
 
 def model_fn(model_dir):
+    '''Load model from file'''
     model = torch.nn.DataParallel(ResNet18())
     with open(os.path.join(model_dir, "model.pth"), "rb") as f:
         model.load_state_dict(torch.load(f))
@@ -36,6 +37,7 @@ def model_fn(model_dir):
 
 
 def save_model(model, model_dir):
+    '''Save model to file'''
     logger.info("Saving the model.")
     path = os.path.join(model_dir, "model.pth")
     # Recommended way from http://pytorch.org/docs/master/notes/serialization.html
@@ -43,6 +45,7 @@ def save_model(model, model_dir):
 
 
 def train(args):
+    '''Train and evaluate a ResNet18 car model classifier'''
     model = ResNet18(dann=True if args.mode == 'dann' else False, freeze_feature_extractor=False)
     model = model.to(device)
 
@@ -62,6 +65,7 @@ def train(args):
         args.source_domain_dir, data_transforms, train_size=0.8
     )
 
+    # Oversample dealership images to match the number of synthetic images
     num_train_samples = len(dataloader_synth_train.dataset)
     dataloader_dealer_train, dataloader_dealer_val = get_train_val_loaders(
         args.target_domain_dir, data_transforms, train_size=0.8, num_train_samples=num_train_samples
@@ -92,6 +96,7 @@ def train(args):
 def train_source(
     model, dataloaders, criterion, optimizer, num_epochs=25, is_inception=False
 ):
+    '''Train a ResNet18 classifier only on data from one (source) domain'''
     since = time.time()
 
     val_acc_history = []
@@ -177,6 +182,7 @@ def train_source(
 
 
 def train_dann(model, data_loader_source, data_loader_target, optimizer, num_epochs):
+    '''Train a DANN model with a ResNet18 feature extractor on data from the source and target domain'''
     for epoch in range(1, num_epochs + 1):
         len_dataloader = min(len(data_loader_source), len(data_loader_target))
         data_source_iter = iter(data_loader_source)
@@ -225,6 +231,7 @@ def train_dann(model, data_loader_source, data_loader_target, optimizer, num_epo
 
 
 def test_dann(model, data_loader):
+    '''Test DANN model'''
     model.eval()
     loss_classifier = torch.nn.NLLLoss(reduction="sum")
     test_loss = 0

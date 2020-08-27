@@ -4,12 +4,11 @@ import torch.optim as optim
 import numpy as np
 import torchvision
 from torchvision import datasets, models, transforms
-from PIL import Image
 from torch.utils.data import WeightedRandomSampler
 
 
 class DaimlerImageFolder(datasets.ImageFolder):
-
+    '''A wrapper around ImageFolder to allow access to the raw data without transforms'''
     # Get original image without transformation to be able to see original data
     def get_sample(self, index):
         img = Image.open(self.samples[index][0])
@@ -19,6 +18,7 @@ class DaimlerImageFolder(datasets.ImageFolder):
 def get_train_val_loaders(
     data_dir, data_transforms, train_size=0.8, batch_size_train=32, batch_size_val=1000, num_train_samples=None
 ):
+    '''Get dataloaders for training and validation'''
     dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
 
     # Split into train and val
