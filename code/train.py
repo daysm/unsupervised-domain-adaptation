@@ -90,17 +90,17 @@ def train(args):
             dataloader_source_train,
             dataloader_target_train,
             optimizer,
-            args.epochs,
+            args,
         )
         test_dann(model, dataloader_target_val)
     else:
         criterion = nn.CrossEntropyLoss()
         dataloaders = {"train": dataloader_source_train, "val": dataloader_source_val}
-        train_source(model, dataloaders, criterion, optimizer, args.epochs)
+        train_source(model, dataloaders, criterion, optimizer, args)
 
 
 def train_source(
-    model, dataloaders, criterion, optimizer, num_epochs=25, is_inception=False
+    model, dataloaders, criterion, optimizer, args, is_inception=False
 ):
     """Train a ResNet18 classifier only on data from one (source) domain, adapted from: https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html"""
     since = time.time()
@@ -110,8 +110,8 @@ def train_source(
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
-    for epoch in range(num_epochs):
-        print("Epoch {}/{}".format(epoch, num_epochs - 1))
+    for epoch in range(args.epochs):
+        print("Epoch {}/{}".format(epoch, args.epochs - 1))
         print("-" * 10)
 
         # Each epoch has a training and validation phase
@@ -187,9 +187,9 @@ def train_source(
     return model, val_acc_history
 
 
-def train_dann(model, data_loader_source, data_loader_target, optimizer, num_epochs):
+def train_dann(model, data_loader_source, data_loader_target, optimizer, args):
     """Train a DANN model with a ResNet18 feature extractor on data from the source and target domain"""
-    for epoch in range(1, num_epochs + 1):
+    for epoch in range(1, args.epochs + 1):
         len_dataloader = min(len(data_loader_source), len(data_loader_target))
         data_source_iter = iter(data_loader_source)
         data_target_iter = iter(data_loader_target)
