@@ -51,8 +51,7 @@ def train(args):
     )
     model = model.to(device)
 
-    input_size = 224
-    summary(model, input_size=(3, input_size, input_size))
+    summary(model, input_size=(3, args.input_size, args.input_size))
 
     # Normalize as described in https://pytorch.org/docs/stable/torchvision/models.html
     normalize = transforms.Normalize(
@@ -60,7 +59,7 @@ def train(args):
     )
 
     data_transforms = transforms.Compose(
-        [transforms.Resize((input_size, input_size)), transforms.ToTensor(), normalize]
+        [transforms.Resize((args.input_size, args.input_size)), transforms.ToTensor(), normalize]
     )
 
     dataloader_source_train, dataloader_source_val = get_train_val_loaders(
@@ -267,7 +266,13 @@ def test_dann(model, data_loader):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    # Data and model checkpoints directories
+    parser.add_argument(
+        "--input-size",
+        type=str,
+        default=224,
+        metavar="N",
+        help="What dimension is the input? (default: 224)",
+    )
     parser.add_argument(
         "--mode",
         type=str,
