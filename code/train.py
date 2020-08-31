@@ -60,11 +60,15 @@ def train(args):
     )
 
     data_transforms = transforms.Compose(
-        [transforms.Resize((args.input_size, args.input_size)), transforms.ToTensor(), normalize]
+        [
+            transforms.Resize((args.input_size, args.input_size)),
+            transforms.ToTensor(),
+            normalize,
+        ]
     )
 
     # Use the entire dataset of the source domain for training
-    if args.mode == 'dann':
+    if args.mode == "dann":
         train_size = 1
     else:
         train_size = 0.8
@@ -72,7 +76,7 @@ def train(args):
         args.data_dir_source_domain, data_transforms, train_size=0.8
     )
 
-    if args.mode == 'dann':
+    if args.mode == "dann":
         # Resample target images to match the number of synthetic images
         num_train_samples = len(dataloader_source_train.dataset)
         dataloader_target_train, dataloader_target_val = get_train_val_loaders(
@@ -91,11 +95,7 @@ def train(args):
 
     if model.dann:
         train_dann(
-            model,
-            dataloader_source_train,
-            dataloader_target_train,
-            optimizer,
-            args,
+            model, dataloader_source_train, dataloader_target_train, optimizer, args,
         )
         test_dann(model, dataloader_target_val)
     else:
@@ -104,9 +104,7 @@ def train(args):
         train_source(model, dataloaders, criterion, optimizer, args)
 
 
-def train_source(
-    model, dataloaders, criterion, optimizer, args, is_inception=False
-):
+def train_source(model, dataloaders, criterion, optimizer, args, is_inception=False):
     """Train a ResNet18 classifier only on data from one (source) domain, adapted from: https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html"""
     since = time.time()
 
@@ -191,7 +189,7 @@ def train_source(
 
 
 def train_dann(model, data_loader_source, data_loader_target, optimizer, args):
-    """Train a DANN model with a ResNet18 feature extractor on data from the source and target domain"""
+    """Train a DANN model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
     for epoch in range(1, args.epochs + 1):
         len_dataloader = min(len(data_loader_source), len(data_loader_target))
         data_source_iter = iter(data_loader_source)
