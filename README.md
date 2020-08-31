@@ -24,7 +24,7 @@ A domain-adversarial neural network consists of a feature extractor, a label cla
 See `demo.ipynb`
 
 ## Implementation details
-There are two available classifier: a "normal" classifier that can be trained on data of one domain (`mode='source'`) as well as a classifier that implements DANN and can be trained on data from the source and target domain (`mode='dann'`). They are trained differently and I am currently using two different training functions. I intend to combine both functions as to not have duplicate code that both share.
+There are two available classifiers: a "normal" classifier that can be trained on data of one domain (`--mode source`) as well as a classifier that implements DANN and can be trained on data from the source and target domain (`--mode dann`). They are trained differently and I am currently using two different training functions.
 
 
 ## References
