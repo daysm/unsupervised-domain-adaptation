@@ -95,18 +95,18 @@ def train(args):
 
     if model.dann:
         train_dann(
-            model, dataloader_source_train, dataloader_target_train, optimizer, args,
+            model, dataloader_source_train, dataloader_target_train, dataloader_target_val, optimizer, args,
         )
-        test_dann(model, dataloader_target_val)
     else:
-        criterion = nn.CrossEntropyLoss()
         dataloaders = {"train": dataloader_source_train, "val": dataloader_source_val}
-        train_source(model, dataloaders, criterion, optimizer, args)
+        train_source(model, dataloaders, optimizer, args)
 
 
-def train_source(model, dataloaders, criterion, optimizer, args, is_inception=False):
+def train_source(model, dataloaders, optimizer, args, is_inception=False):
     """Train a ResNet18 classifier only on data from one (source) domain, adapted from: https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html"""
     since = time.time()
+
+    criterion = nn.CrossEntropyLoss()
 
     val_acc_history = []
 
@@ -188,7 +188,7 @@ def train_source(model, dataloaders, criterion, optimizer, args, is_inception=Fa
     return model, val_acc_history
 
 
-def train_dann(model, data_loader_source, data_loader_target, optimizer, args):
+def train_dann(model, data_loader_source, data_loader_target, data_loader_val, optimizer, args):
     """Train a DANN model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
     for epoch in range(1, args.epochs + 1):
         len_dataloader = min(len(data_loader_source), len(data_loader_target))
@@ -235,12 +235,13 @@ def train_dann(model, data_loader_source, data_loader_target, optimizer, args):
                     err_tgt_domain.data.cpu().item(),
                 )
             )
+        test_dann(model, data_loader_val)
 
 
 def test_dann(model, data_loader):
     """Test DANN model"""
     model.eval()
-    loss_classifier = torch.nn.NLLLoss(reduction="sum")
+    loss_classifier = torch.nn.CrossEntropyLoss(reduction="sum")
     test_loss = 0
     correct = 0
     preds = []
