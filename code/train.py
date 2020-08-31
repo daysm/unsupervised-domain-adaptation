@@ -30,6 +30,7 @@ torch.manual_seed(0)
 
 def model_fn(model_dir):
     """Load model from file"""
+    logger.info("Loading the model.")
     model = torch.nn.DataParallel(ResNet18())
     with open(os.path.join(model_dir, "model.pth"), "rb") as f:
         model.load_state_dict(torch.load(f))
@@ -62,11 +63,16 @@ def train(args):
         [transforms.Resize((args.input_size, args.input_size)), transforms.ToTensor(), normalize]
     )
 
+    # Use the entire dataset of the source domain for training
+    if args.mode == 'dann':
+        train_size = 1
+    else:
+        train_size = 0.8
     dataloader_source_train, dataloader_source_val = get_train_val_loaders(
         args.data_dir_source_domain, data_transforms, train_size=0.8
     )
 
-    if args.data_dir_target_domain is not None:
+    if args.mode == 'dann':
         # Resample target images to match the number of synthetic images
         num_train_samples = len(dataloader_source_train.dataset)
         dataloader_target_train, dataloader_target_val = get_train_val_loaders(
@@ -171,8 +177,6 @@ def train_source(
             if phase == "val":
                 val_acc_history.append(epoch_acc)
 
-        print()
-
     time_elapsed = time.time() - since
     print(
         "Training complete in {:.0f}m {:.0f}s".format(
@@ -268,7 +272,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--input-size",
-        type=str,
+        type=int,
         default=224,
         metavar="N",
         help="What dimension is the input? (default: 224)",
