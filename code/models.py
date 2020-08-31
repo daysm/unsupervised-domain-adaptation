@@ -18,6 +18,52 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
+class LabelClassifier(nn.Module):
+    def __init__(
+        self, num_ftrs, num_classes
+    ):
+        super().__init__()
+        self.num_ftrs = num_ftrs
+        self.num_classes = num_classes
+        self.label_classifier = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc1", nn.Linear(self.num_ftrs, 100)),
+                    ("c_bn1", nn.BatchNorm1d(100)),
+                    ("c_relu1", nn.ReLU()),
+                    ("c_drop1", nn.Dropout2d()),
+                    ("c_fc2", nn.Linear(100, 100)),
+                    ("c_bn2", nn.BatchNorm1d(100)),
+                    ("c_relu2", nn.ReLU()),
+                    ("c_fc3", nn.Linear(100, self.num_classes)),
+                ]
+            )
+        )
+
+    def forward(self, x):
+        return self.label_classifier(x)
+
+class DomainClassifier(nn.Module):
+    def __init__(
+        self, num_ftrs
+    ):
+        super().__init__()
+        self.num_ftrs = num_ftrs
+        self.domain_classifier = nn.Sequential(
+            OrderedDict(
+                [
+                    ("d_revgrad", RevGrad()),
+                    ("d_fc1", nn.Linear(self.num_ftrs, 100)),
+                    ("d_bn1", nn.BatchNorm1d(100)),
+                    ("d_relu1", nn.ReLU()),
+                    ("d_fc2", nn.Linear(100, 2)),
+                ]
+            )
+        )
+
+    def forward(self, x):
+        return self.domain_classifier(x)
+
 
 class ResNet18(nn.Module):
     def __init__(
@@ -36,45 +82,19 @@ class ResNet18(nn.Module):
         self.feature_extractor.fc = Identity()
 
         if dann:
-            # Label classifier
-            self.classifier = nn.Sequential(
-                OrderedDict(
-                    [
-                        ("c_fc1", nn.Linear(self.num_ftrs, 100)),
-                        ("c_bn1", nn.BatchNorm1d(100)),
-                        ("c_relu1", nn.ReLU()),
-                        ("c_drop1", nn.Dropout2d()),
-                        ("c_fc2", nn.Linear(100, 100)),
-                        ("c_bn2", nn.BatchNorm1d(100)),
-                        ("c_relu2", nn.ReLU()),
-                        ("c_fc3", nn.Linear(100, self.num_classes)),
-                    ]
-                )
-            )
-
-            # Domain discriminator
-            self.discriminator = nn.Sequential(
-                OrderedDict(
-                    [
-                        ("d_revgrad", RevGrad()),
-                        ("d_fc1", nn.Linear(self.num_ftrs, 100)),
-                        ("d_bn1", nn.BatchNorm1d(100)),
-                        ("d_relu1", nn.ReLU()),
-                        ("d_fc2", nn.Linear(100, 2)),
-                    ]
-                )
-            )
+            self.label_classifier = LabelClassifier(self.num_ftrs, self.num_classes)
+            self.domain_classifier = DomainClassifier(self.num_ftrs)
         else:
-            self.classifier = nn.Linear(self.num_ftrs, self.num_classes)
+            self.label_classifier = nn.Linear(self.num_ftrs, self.num_classes)
 
     def forward(self, x):
         x = self.feature_extractor(x)
         if self.dann:
-            label_output = self.classifier(x)
-            domain_output = self.discriminator(x)
+            label_output = self.label_classifier(x)
+            domain_output = self.domain_classifier(x)
             return label_output, domain_output
         else:
-            label_output = self.classifier(x)
+            label_output = self.label_classifier(x)
             return label_output
 
     def _freeze_feature_extractor(self):
