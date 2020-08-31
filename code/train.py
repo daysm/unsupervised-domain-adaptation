@@ -15,7 +15,7 @@ import torch.utils.data.distributed
 from torchvision import datasets, transforms
 from torchsummary import summary
 
-from models import ResNet18
+from models import ImageClassifier
 from data import get_train_val_loaders
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ torch.manual_seed(0)
 def model_fn(model_dir):
     """Load model from file"""
     logger.info("Loading the model.")
-    model = torch.nn.DataParallel(ResNet18())
+    model = torch.nn.ImageClassifier()
     with open(os.path.join(model_dir, "model.pth"), "rb") as f:
         model.load_state_dict(torch.load(f))
     return model.to(device)
@@ -47,7 +47,7 @@ def save_model(model, model_dir):
 
 def train(args):
     """Train and evaluate a ResNet18 car model classifier"""
-    model = ResNet18(
+    model = ImageClassifier(
         dann=True if args.mode == "dann" else False, freeze_feature_extractor=False
     )
     model = model.to(device)
@@ -76,7 +76,7 @@ def train(args):
         args.data_dir_source_domain, data_transforms, train_size=0.8
     )
 
-    if args.mode == "dann":
+    if args.data_dir_target_domain:
         # Resample target images to match the number of synthetic images
         num_train_samples = len(dataloader_source_train.dataset)
         dataloader_target_train, dataloader_target_val = get_train_val_loaders(
@@ -103,7 +103,10 @@ def train(args):
             args,
         )
     else:
-        dataloaders = {"train": dataloader_source_train, "val": dataloader_source_val}
+        if args.data_dir_target_domain:
+            dataloaders = {"train": dataloader_source_train, "val": dataloader_target_val}
+        else:
+            dataloaders = {"train": dataloader_source_train, "val": dataloader_source_val}
         train_source(model, dataloaders, optimizer, args)
 
 
@@ -112,9 +115,7 @@ def train_source(model, dataloaders, optimizer, args):
     since = time.time()
 
     criterion = nn.CrossEntropyLoss()
-
     val_acc_history = []
-
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
@@ -175,6 +176,7 @@ def train_source(model, dataloaders, optimizer, args):
 
     # load best model weights
     model.load_state_dict(best_model_wts)
+    save_model(model, model_dir)
     return model, val_acc_history
 
 
@@ -182,6 +184,11 @@ def train_dann(
     model, data_loader_source, data_loader_target, data_loader_val, optimizer, args
 ):
     """Train a DANN model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
+
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_acc = 0
+    val_acc_history = []
+
     for epoch in range(1, args.epochs + 1):
         len_dataloader = min(len(data_loader_source), len(data_loader_target))
         data_source_iter = iter(data_loader_source)
@@ -227,8 +234,18 @@ def train_dann(
                     err_tgt_domain.data.cpu().item(),
                 )
             )
-        test_dann(model, data_loader_val)
+        acc = test_dann(model, data_loader_val)
+        if acc > best_acc:
+            best_acc = acc
+            best_model_wts = copy.deepcopy(model.state_dict())
+        val_acc_history.append(acc)
 
+
+    model.load_state_dict(best_model_wts)
+    logger.info("Evaluate best model...")
+    acc = test_dann(model, data_loader_val)
+    save_model(model, args.model_dir)
+    return model, val_acc_history
 
 def test_dann(model, data_loader):
     """Test DANN model"""
@@ -246,16 +263,17 @@ def test_dann(model, data_loader):
             preds.extend(pred.tolist())
             correct += pred.eq(target).sum()
     test_loss /= len(data_loader.dataset)
+    acc = 100.0 * correct / len(data_loader.dataset)
     print(
         "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
             test_loss,
             correct,
             len(data_loader.dataset),
-            100.0 * correct / len(data_loader.dataset),
+            acc,
         )
     )
 
-    return preds
+    return acc
 
 
 if __name__ == "__main__":

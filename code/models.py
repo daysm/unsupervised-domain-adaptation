@@ -84,7 +84,7 @@ class FeatureExtractor(nn.Module):
         return self.feature_extractor(x)
 
 
-class ResNet18(nn.Module):
+class ImageClassifier(nn.Module):
     def __init__(
         self, num_classes=10, pretrained=True, freeze_feature_extractor=False, dann=True
     ):
@@ -111,8 +111,3 @@ class ResNet18(nn.Module):
         else:
             label_output = self.label_classifier(x)
             return label_output
-
-
-if __name__ == "__main__":
-    model = ResNet18(dann=True, freeze_feature_extractor=False)
-    summary(model, input_size=(3, 224, 224))
