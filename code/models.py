@@ -18,10 +18,9 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
+
 class LabelClassifier(nn.Module):
-    def __init__(
-        self, num_ftrs, num_classes
-    ):
+    def __init__(self, num_ftrs, num_classes):
         super().__init__()
         self.num_ftrs = num_ftrs
         self.num_classes = num_classes
@@ -43,10 +42,9 @@ class LabelClassifier(nn.Module):
     def forward(self, x):
         return self.label_classifier(x)
 
+
 class DomainClassifier(nn.Module):
-    def __init__(
-        self, num_ftrs
-    ):
+    def __init__(self, num_ftrs):
         super().__init__()
         self.num_ftrs = num_ftrs
         self.domain_classifier = nn.Sequential(
@@ -65,26 +63,43 @@ class DomainClassifier(nn.Module):
         return self.domain_classifier(x)
 
 
+class FeatureExtractor(nn.Module):
+    def __init__(self, pretrained, freeze_feature_extractor):
+        super().__init__()
+        self.feature_extractor = models.resnet18(pretrained=pretrained)
+        self.freeze_feature_extractor = freeze_feature_extractor
+        if self.freeze_feature_extractor:
+            self._freeze_feature_extractor()
+
+        self.num_features = self.feature_extractor.fc.in_features
+
+        # Disable last fc layer, use ResNet only as feature extractor
+        self.feature_extractor.fc = Identity()
+
+    def _freeze_feature_extractor(self):
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = False
+
+    def forward(self, x):
+        return self.feature_extractor(x)
+
+
 class ResNet18(nn.Module):
     def __init__(
         self, num_classes=10, pretrained=True, freeze_feature_extractor=False, dann=True
     ):
         super().__init__()
         self.dann = dann
-        self.feature_extractor = models.resnet18(pretrained=pretrained)
-        self.freeze_feature_extractor = freeze_feature_extractor
-        if self.freeze_feature_extractor:
-            self._freeze_feature_extractor()
-        self.num_ftrs = self.feature_extractor.fc.in_features
+        self.feature_extractor = FeatureExtractor(
+            pretrained=pretrained, freeze_feature_extractor=freeze_feature_extractor
+        )
+        self.num_ftrs = self.feature_extractor.num_features
         self.num_classes = num_classes
 
-        # Use Resnet only as feature extractor, disable last fc layer
-        self.feature_extractor.fc = Identity()
-
-        if dann:
+        if self.dann:
             self.label_classifier = LabelClassifier(self.num_ftrs, self.num_classes)
             self.domain_classifier = DomainClassifier(self.num_ftrs)
-        else:
+        else:  # source
             self.label_classifier = nn.Linear(self.num_ftrs, self.num_classes)
 
     def forward(self, x):
@@ -96,10 +111,6 @@ class ResNet18(nn.Module):
         else:
             label_output = self.label_classifier(x)
             return label_output
-
-    def _freeze_feature_extractor(self):
-        for param in self.feature_extractor.parameters():
-            param.requires_grad = False
 
 
 if __name__ == "__main__":
