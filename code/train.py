@@ -54,6 +54,10 @@ def train(args):
     summary(model, input_size=(3, args.input_size, args.input_size))
 
     # Normalize as described in https://pytorch.org/docs/stable/torchvision/models.html
+    # The pretrained model expects input images normalized in this way
+    # The values have been calculated on a random subset of ImageNet training images
+    # The exact subset has been lost
+    # See: https://github.com/pytorch/vision/issues/1439
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
     )
@@ -103,9 +107,15 @@ def train(args):
         )
     else:
         if args.data_dir_target_domain:
-            dataloaders = {"train": dataloader_source_train, "val": dataloader_target_val}
+            dataloaders = {
+                "train": dataloader_source_train,
+                "val": dataloader_target_val,
+            }
         else:
-            dataloaders = {"train": dataloader_source_train, "val": dataloader_source_val}
+            dataloaders = {
+                "train": dataloader_source_train,
+                "val": dataloader_source_val,
+            }
         train_source(model, dataloaders, optimizer, args)
 
 
@@ -149,7 +159,11 @@ def train_source(model, dataloaders, optimizer, args):
                 batch_loss = loss.item()
                 batch_corrects = torch.sum(preds == labels.data)
                 batch_acc = batch_corrects.double() / inputs.size(0)
-                print("{} batch loss: {:.4f} batch acc: {:.4f}".format(phase, loss.item(), batch_acc))
+                print(
+                    "{} batch loss: {:.4f} batch acc: {:.4f}".format(
+                        phase, loss.item(), batch_acc
+                    )
+                )
 
                 running_loss += batch_loss * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
@@ -239,12 +253,12 @@ def train_dann(
             best_model_wts = copy.deepcopy(model.state_dict())
         val_acc_history.append(acc)
 
-
     model.load_state_dict(best_model_wts)
     logger.info("Evaluate best model...")
     acc = test_dann(model, data_loader_val)
     save_model(model, args.model_dir)
     return model, val_acc_history
+
 
 def test_dann(model, data_loader):
     """Test DANN model"""
@@ -265,10 +279,7 @@ def test_dann(model, data_loader):
     acc = 100.0 * correct / len(data_loader.dataset)
     print(
         "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
-            test_loss,
-            correct,
-            len(data_loader.dataset),
-            acc,
+            test_loss, correct, len(data_loader.dataset), acc,
         )
     )
 
@@ -290,7 +301,9 @@ if __name__ == "__main__":
         type=str,
         default="dann",
         metavar="M",
-        help="Which mode? dann, source (default: dann)",
+        help="""Which mode? dann: Train on source and target domain, evaluate on target domain,
+            source: train on source domain, evaluate on source domain
+            (evaluate on target domain, if --data-dir-target-domain passed) (default: dann)""",
     )
     parser.add_argument(
         "--batch-size",
