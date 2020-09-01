@@ -51,7 +51,6 @@ def train(args):
         dann=True if args.mode == "dann" else False, freeze_feature_extractor=False
     )
     model = model.to(device)
-
     summary(model, input_size=(3, args.input_size, args.input_size))
 
     # Normalize as described in https://pytorch.org/docs/stable/torchvision/models.html
@@ -176,7 +175,7 @@ def train_source(model, dataloaders, optimizer, args):
 
     # load best model weights
     model.load_state_dict(best_model_wts)
-    save_model(model, model_dir)
+    save_model(model, args.model_dir)
     return model, val_acc_history
 
 
