@@ -2,3 +2,4 @@ numpy==1.18.2
 torch==1.6.0
 torchvision==0.7.0
 torchsummary==1.5.1
+wandb==0.9.6

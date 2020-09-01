@@ -14,6 +14,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 from torchvision import datasets, transforms
 from torchsummary import summary
+import wandb
 
 from models import ImageClassifier
 from data import get_train_val_loaders
@@ -47,6 +48,7 @@ def save_model(model, model_dir):
 
 def train(args):
     """Train and evaluate a ResNet18 car model classifier"""
+    wandb.init(config=args, project=args.project)
     model = ImageClassifier(
         dann=True if args.mode == "dann" else False, freeze_feature_extractor=False
     )
@@ -122,7 +124,7 @@ def train(args):
 def train_source(model, dataloaders, optimizer, args):
     """Train a ResNet18 classifier only on data from one (source) domain, adapted from: https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html"""
     since = time.time()
-
+    wandb.watch(model)
     criterion = nn.CrossEntropyLoss()
     val_acc_history = []
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -145,7 +147,6 @@ def train_source(model, dataloaders, optimizer, args):
             for inputs, labels in dataloaders[phase]:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-
                 optimizer.zero_grad()
 
                 with torch.set_grad_enabled(phase == "train"):
@@ -164,12 +165,19 @@ def train_source(model, dataloaders, optimizer, args):
                         phase, loss.item(), batch_acc
                     )
                 )
+                if phase == 'train':
+                    wandb.log({"loss": loss.item(), "batch_acc": batch_acc})
+                if phase == 'val':
+                    wandb.log({"val_loss": loss.item()})
 
                 running_loss += batch_loss * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
+
+            if phase == 'val':
+                wandb.log({"acc": epoch_acc})
 
             print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
 
@@ -190,6 +198,7 @@ def train_source(model, dataloaders, optimizer, args):
     # load best model weights
     model.load_state_dict(best_model_wts)
     save_model(model, args.model_dir)
+    save_model(model, wandb.run.dir)
     return model, val_acc_history
 
 
@@ -247,6 +256,7 @@ def train_dann(
                     err_tgt_domain.data.cpu().item(),
                 )
             )
+            wandb.log({"loss_src_label": err_src_label.data.cpu().item(), "loss_src_domain": err_src_domain.data.cpu().item(), "loss_tgt_domain": err_tgt_domain.data.cpu().item()})
         acc = test_dann(model, data_loader_val)
         if acc > best_acc:
             best_acc = acc
@@ -254,8 +264,6 @@ def train_dann(
         val_acc_history.append(acc)
 
     model.load_state_dict(best_model_wts)
-    logger.info("Evaluate best model...")
-    acc = test_dann(model, data_loader_val)
     save_model(model, args.model_dir)
     return model, val_acc_history
 
@@ -282,6 +290,7 @@ def test_dann(model, data_loader):
             test_loss, correct, len(data_loader.dataset), acc,
         )
     )
+    wandb.log({"loss_tgt_label_val": test_loss, "acc_val": acc})
 
     return acc
 
@@ -349,6 +358,13 @@ if __name__ == "__main__":
         default=100,
         metavar="N",
         help="how many batches to wait before logging training status (default: 100)",
+    )
+    parser.add_argument(
+        "--project",
+        type=str,
+        default='unsupervised-domain-adaptation',
+        metavar="P",
+        help="WandB project name",
     )
     parser.add_argument(
         "--backend",
