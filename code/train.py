@@ -15,6 +15,7 @@ import torch.utils.data.distributed
 from torchvision import datasets, transforms
 from torchsummary import summary
 import wandb
+from dotenv import load_dotenv
 
 from models import ImageClassifier
 from data import get_train_val_loaders
@@ -28,6 +29,9 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 torch.manual_seed(0)
 
+# Load .env (for WandB API key)
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(dotenv_path)
 
 def model_fn(model_dir):
     """Load model from file"""
