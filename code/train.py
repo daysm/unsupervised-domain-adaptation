@@ -36,7 +36,7 @@ load_dotenv(dotenv_path)
 def model_fn(model_dir):
     """Load model from file"""
     logger.info("Loading the model.")
-    model = torch.nn.ImageClassifier()
+    model = ImageClassifier()
     with open(os.path.join(model_dir, "model.pth"), "rb") as f:
         model.load_state_dict(torch.load(f))
     return model.to(device)
@@ -54,7 +54,7 @@ def train(args):
     """Train and evaluate a ResNet18 car model classifier"""
     wandb.init(config=args, project=args.project)
     model = ImageClassifier(
-        dann=True if args.mode == "dann" else False, freeze_feature_extractor=False
+        dann=True if args.mode == "dann" else False, freeze_feature_extractor=False, pretrained=True, num_classes=args.num_classes
     )
     model = model.to(device)
     summary(model, input_size=(3, args.input_size, args.input_size))
@@ -82,7 +82,7 @@ def train(args):
     else:
         train_size = 0.8
     dataloader_source_train, dataloader_source_val = get_train_val_loaders(
-        args.data_dir_source_domain, data_transforms, train_size=0.8
+        args.data_dir_source_domain, data_transforms, train_size=train_size
     )
 
     if args.data_dir_target_domain:
@@ -308,6 +308,13 @@ if __name__ == "__main__":
         default=224,
         metavar="N",
         help="What dimension is the input? (default: 224)",
+    )
+    parser.add_argument(
+        "--num_classes",
+        type=int,
+        default=10,
+        metavar="N",
+        help="How many classes are there? (default: 10)",
     )
     parser.add_argument(
         "--mode",
