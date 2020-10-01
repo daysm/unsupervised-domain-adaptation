@@ -30,8 +30,9 @@ device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("
 torch.manual_seed(0)
 
 # Load .env (for WandB API key)
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
+
 
 def model_fn(model_dir):
     """Load model from file"""
@@ -50,11 +51,11 @@ def save_model(model, model_dir):
     torch.save(model.cpu().state_dict(), path)
 
 
-def train(args):
+def main(args):
     """Train and evaluate a ResNet18 car model classifier"""
     wandb.init(config=args, project=args.project)
     model = ImageClassifier(
-        dann=True if args.mode == "dann" else False, freeze_feature_extractor=False, pretrained=True, num_classes=args.num_classes
+        feature_extractor_name=args.feature_extractor, freeze_feature_extractor=False, pretrained=True, num_classes=args.num_classes
     )
     model = model.to(device)
     summary(model, input_size=(3, args.input_size, args.input_size))
@@ -76,24 +77,24 @@ def train(args):
         ]
     )
 
-    # Use the entire dataset of the source domain for training
+    ## Source data
     if args.mode == "dann":
-        train_size = 1
+        train_size = 1  # Train on full source dataset when using DANN
     else:
-        train_size = 0.8
+        train_size = args.train_size
     dataloader_source_train, dataloader_source_val = get_train_val_loaders(
         args.data_dir_source_domain, data_transforms, train_size=train_size
     )
 
-    if args.data_dir_target_domain:
-        # Resample target images to match the number of synthetic images
-        num_train_samples = len(dataloader_source_train.dataset)
-        dataloader_target_train, dataloader_target_val = get_train_val_loaders(
-            args.data_dir_target_domain,
-            data_transforms,
-            train_size=0.8,
-            num_train_samples=num_train_samples,
-        )
+    ## Target data
+    # Resample target images to match the number of synthetic images
+    num_train_samples = len(dataloader_source_train.dataset)
+    dataloader_target_train, dataloader_target_val = get_train_val_loaders(
+        args.data_dir_target_domain,
+        data_transforms,
+        train_size=args.train_size,
+        num_train_samples=num_train_samples,
+    )
 
     # TODO: Do I need to check whether param.requires_grad == True?
     optimizer = optim.SGD(
@@ -102,114 +103,20 @@ def train(args):
         momentum=args.momentum,
     )
 
-    if model.dann:
-        train_dann(
-            model,
-            dataloader_source_train,
-            dataloader_target_train,
-            dataloader_target_val,
-            optimizer,
-            args,
-        )
-    else:
-        if args.data_dir_target_domain:
-            dataloaders = {
-                "train": dataloader_source_train,
-                "val": dataloader_target_val,
-            }
-        else:
-            dataloaders = {
-                "train": dataloader_source_train,
-                "val": dataloader_source_val,
-            }
-        train_source(model, dataloaders, optimizer, args)
-
-
-def train_source(model, dataloaders, optimizer, args):
-    """Train a ResNet18 classifier only on data from one (source) domain, adapted from: https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html"""
-    since = time.time()
-    wandb.watch(model)
-    criterion = nn.CrossEntropyLoss()
-    val_acc_history = []
-    best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
-
-    for epoch in range(args.epochs):
-        print("Epoch {}/{}".format(epoch, args.epochs - 1))
-        print("-" * 10)
-
-        # Each epoch has a training and validation phase
-        for phase in ["train", "val"]:
-            if phase == "train":
-                model.train()  # Set model to training mode
-            else:
-                model.eval()  # Set model to evaluate mode
-
-            running_loss = 0.0
-            running_corrects = 0
-
-            for inputs, labels in dataloaders[phase]:
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-                optimizer.zero_grad()
-
-                with torch.set_grad_enabled(phase == "train"):
-                    outputs = model(inputs)
-                    loss = criterion(outputs, labels)
-                    _, preds = torch.max(outputs, 1)
-                    if phase == "train":
-                        loss.backward()
-                        optimizer.step()
-
-                batch_loss = loss.item()
-                batch_corrects = torch.sum(preds == labels.data)
-                batch_acc = batch_corrects.double() / inputs.size(0)
-                print(
-                    "{} batch loss: {:.4f} batch acc: {:.4f}".format(
-                        phase, loss.item(), batch_acc
-                    )
-                )
-                if phase == 'train':
-                    wandb.log({"loss": loss.item(), "batch_acc": batch_acc})
-                if phase == 'val':
-                    wandb.log({"val_loss": loss.item()})
-
-                running_loss += batch_loss * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-
-            epoch_loss = running_loss / len(dataloaders[phase].dataset)
-            epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
-
-            if phase == 'val':
-                wandb.log({"acc": epoch_acc})
-
-            print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
-
-            if phase == "val" and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                best_model_wts = copy.deepcopy(model.state_dict())
-            if phase == "val":
-                val_acc_history.append(epoch_acc)
-
-    time_elapsed = time.time() - since
-    print(
-        "Training complete in {:.0f}m {:.0f}s".format(
-            time_elapsed // 60, time_elapsed % 60
-        )
+    train(
+        model,
+        dataloader_source_train,
+        dataloader_target_train,
+        dataloader_target_val,
+        optimizer,
+        args,
     )
-    print("Best val Acc: {:4f}".format(best_acc))
-
-    # load best model weights
-    model.load_state_dict(best_model_wts)
-    save_model(model, args.model_dir)
-    save_model(model, wandb.run.dir)
-    return model, val_acc_history
 
 
-def train_dann(
+def train(
     model, data_loader_source, data_loader_target, data_loader_val, optimizer, args
 ):
-    """Train a DANN model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
+    """Train a model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0
@@ -219,8 +126,8 @@ def train_dann(
         len_dataloader = min(len(data_loader_source), len(data_loader_target))
         data_source_iter = iter(data_loader_source)
         data_target_iter = iter(data_loader_target)
-        loss_classifier = torch.nn.CrossEntropyLoss()
-        loss_discriminator = torch.nn.CrossEntropyLoss()
+        loss_label_classifier = torch.nn.CrossEntropyLoss()
+        loss_domain_classifier = torch.nn.CrossEntropyLoss()
 
         model.train()
         for i in range(len_dataloader):
@@ -233,8 +140,8 @@ def train_dann(
             src_domain = torch.zeros_like(src_label)
             src_domain = src_domain.to(device)
             class_output, domain_output = model(src_img)
-            err_src_label = loss_classifier(class_output, src_label)
-            err_src_domain = loss_discriminator(domain_output, src_domain)
+            err_src_label = loss_label_classifier(class_output, src_label)
+            err_src_domain = loss_domain_classifier(domain_output, src_domain)
 
             # Training with target data
             data_target = data_target_iter.next()
@@ -243,9 +150,12 @@ def train_dann(
             tgt_domain = torch.ones_like(tgt_label)
             tgt_domain = tgt_domain.to(device)
             _, domain_output = model(tgt_img)
-            err_tgt_domain = loss_discriminator(domain_output, tgt_domain)
+            err_tgt_domain = loss_domain_classifier(domain_output, tgt_domain)
 
-            err = err_src_label + err_tgt_domain + err_src_domain
+            if args.mode == "dann":
+                err = err_src_label + err_tgt_domain + err_src_domain
+            else:
+                err = err_src_label
             err.backward()
             optimizer.step()
 
@@ -260,8 +170,14 @@ def train_dann(
                     err_tgt_domain.data.cpu().item(),
                 )
             )
-            wandb.log({"loss_src_label": err_src_label.data.cpu().item(), "loss_src_domain": err_src_domain.data.cpu().item(), "loss_tgt_domain": err_tgt_domain.data.cpu().item()})
-        acc = test_dann(model, data_loader_val)
+            wandb.log(
+                {
+                    "loss_src_label": err_src_label.data.cpu().item(),
+                    "loss_src_domain": err_src_domain.data.cpu().item(),
+                    "loss_tgt_domain": err_tgt_domain.data.cpu().item(),
+                }
+            )
+        acc = test(model, data_loader_val)
         if acc > best_acc:
             best_acc = acc
             best_model_wts = copy.deepcopy(model.state_dict())
@@ -272,10 +188,10 @@ def train_dann(
     return model, val_acc_history
 
 
-def test_dann(model, data_loader):
-    """Test DANN model"""
+def test(model, data_loader):
+    """Test model"""
     model.eval()
-    loss_classifier = torch.nn.CrossEntropyLoss(reduction="sum")
+    loss_label_classifier = torch.nn.CrossEntropyLoss(reduction="sum")
     test_loss = 0
     correct = 0
     preds = []
@@ -283,7 +199,7 @@ def test_dann(model, data_loader):
         for data, target in data_loader:
             data, target = data.to(device), target.to(device)
             class_output, _ = model(data)
-            test_loss += loss_classifier(class_output, target).item()
+            test_loss += loss_label_classifier(class_output, target).item()
             pred = class_output.argmax(dim=1)
             preds.extend(pred.tolist())
             correct += pred.eq(target).sum()
@@ -308,6 +224,13 @@ if __name__ == "__main__":
         default=224,
         metavar="N",
         help="What dimension is the input? (default: 224)",
+    )
+    parser.add_argument(
+        "--feature-extractor",
+        type=str,
+        default="resnet18",
+        metavar="N",
+        help="Which feature extractor to use? (default: resnet18)",
     )
     parser.add_argument(
         "--num_classes",
@@ -338,6 +261,13 @@ if __name__ == "__main__":
         default=1000,
         metavar="N",
         help="input batch size for testing (default: 1000)",
+    )
+    parser.add_argument(
+        "--train-size",
+        type=int,
+        default=0.8,
+        metavar="N",
+        help="train size (default: 0.8)",
     )
     parser.add_argument(
         "--epochs",
@@ -373,7 +303,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--project",
         type=str,
-        default='unsupervised-domain-adaptation',
+        default="unsupervised-domain-adaptation",
         metavar="P",
         help="WandB project name",
     )
@@ -424,4 +354,4 @@ if __name__ == "__main__":
         default=os.environ["SM_NUM_GPUS"] if "SM_NUM_GPUS" in os.environ else None,
     )
 
-    train(parser.parse_args())
+    main(parser.parse_args())
