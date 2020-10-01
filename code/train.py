@@ -140,6 +140,11 @@ def train(
             src_domain = torch.zeros_like(src_label)
             src_domain = src_domain.to(device)
             class_output, domain_output = model(src_img)
+            preds = class_output.argmax(dim=1)
+            batch_acc_train = preds.eq(src_label).sum().item() / src_label.size(0)
+            domain_preds = domain_output.argmax(dim=1)
+            batch_acc_domain_src = domain_preds.eq(src_domain).sum().item() / src_domain.size(0)
+
             err_src_label = loss_label_classifier(class_output, src_label)
             err_src_domain = loss_domain_classifier(domain_output, src_domain)
 
@@ -150,6 +155,8 @@ def train(
             tgt_domain = torch.ones_like(tgt_label)
             tgt_domain = tgt_domain.to(device)
             _, domain_output = model(tgt_img)
+            domain_preds = domain_output.argmax(dim=1)
+            batch_acc_domain_tgt = domain_preds.eq(tgt_domain).sum().item() / tgt_domain.size(0)
             err_tgt_domain = loss_domain_classifier(domain_output, tgt_domain)
 
             if args.mode == "dann":
@@ -160,7 +167,7 @@ def train(
             optimizer.step()
 
             print(
-                "epoch: %d, [iter: %d / all %d], err_src_label: %f, err_src_domain: %f, err_tgt_domain: %f"
+                "epoch: %d, [iter: %d / all %d], err_src_label: %f, err_src_domain: %f, err_tgt_domain: %f, b_acc: %f, b_acc_domain_src: %f, b_acc_domain_tgt: %f"
                 % (
                     epoch,
                     i,
@@ -168,6 +175,9 @@ def train(
                     err_src_label.data.cpu().item(),
                     err_src_domain.data.cpu().item(),
                     err_tgt_domain.data.cpu().item(),
+                    batch_acc_train,
+                    batch_acc_domain_src,
+                    batch_acc_domain_tgt
                 )
             )
             wandb.log(
@@ -175,6 +185,9 @@ def train(
                     "loss_src_label": err_src_label.data.cpu().item(),
                     "loss_src_domain": err_src_domain.data.cpu().item(),
                     "loss_tgt_domain": err_tgt_domain.data.cpu().item(),
+                    "batch_acc_train": batch_acc_train,
+                    "batch_acc_domain_src": batch_acc_domain_src,
+                    "batch_acc_domain_tgt": batch_acc_domain_tgt
                 }
             )
         acc = test(model, data_loader_val)
@@ -204,9 +217,9 @@ def test(model, data_loader):
             preds.extend(pred.tolist())
             correct += pred.eq(target).sum()
     test_loss /= len(data_loader.dataset)
-    acc = 100.0 * correct / len(data_loader.dataset)
+    acc = correct / len(data_loader.dataset)
     print(
-        "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
+        "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.4f}%)\n".format(
             test_loss, correct, len(data_loader.dataset), acc,
         )
     )
