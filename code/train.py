@@ -190,6 +190,7 @@ def train(
                     "batch_acc_domain_tgt": batch_acc_domain_tgt
                 }
             )
+        
         acc = test(model, data_loader_val)
         if acc > best_acc:
             best_acc = acc
@@ -215,7 +216,7 @@ def test(model, data_loader):
             test_loss += loss_label_classifier(class_output, target).item()
             pred = class_output.argmax(dim=1)
             preds.extend(pred.tolist())
-            correct += pred.eq(target).sum()
+            correct += pred.eq(target).sum().item()
     test_loss /= len(data_loader.dataset)
     acc = correct / len(data_loader.dataset)
     print(
