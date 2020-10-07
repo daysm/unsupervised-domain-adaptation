@@ -77,7 +77,7 @@ class DomainClassifier(nn.Module):
 
 
 class FeatureExtractor(nn.Module):
-    def __init__(self, pretrained, freeze_feature_extractor):
+    def __init__(self, pretrained, freeze_feature_extractor, feature_extractor_name):
         """
         pretrained: use pretrained weights (trained on ImageNet)
         freeze_feature_extractor: True: feature extractor is frozen - weights remain the same,
@@ -85,15 +85,17 @@ class FeatureExtractor(nn.Module):
         
         """
         super().__init__()
-        self.feature_extractor = models.resnet18(pretrained=pretrained)
+        if feature_extractor_name == 'resnet18':
+            self.feature_extractor = models.resnet18(pretrained=pretrained)
+            self.num_features = self.feature_extractor.fc.in_features
+            self.feature_extractor.fc = Identity()  # Disable last fc layer, use ResNet only as feature extractor
+        if feature_extractor_name == 'alexnet':
+            self.feature_extractor = models.alexnet(pretrained=pretrained)
+            self.num_features = self.feature_extractor.classifier[6].in_features
+            self.feature_extractor.classifier[6] = Identity()
         self.freeze_feature_extractor = freeze_feature_extractor
         if self.freeze_feature_extractor:
             self._freeze_feature_extractor()
-
-        self.num_features = self.feature_extractor.fc.in_features
-
-        # Disable last fc layer, use ResNet only as feature extractor
-        self.feature_extractor.fc = Identity()
 
     def _freeze_feature_extractor(self):
         for param in self.feature_extractor.parameters():
@@ -141,14 +143,14 @@ class ImageClassifier(nn.Module):
 
         """
         super().__init__()
-        self.feature_extractor = FeatureExtractor(
-            pretrained=pretrained, freeze_feature_extractor=freeze_feature_extractor
-        )
         if feature_extractor_name == "mnist_extractor":
             print("Extracting for MNIST")
             self.feature_extractor = FeatureExtractorMNIST(
             pretrained=pretrained, freeze_feature_extractor=freeze_feature_extractor
         )
+        else:
+            self.feature_extractor = FeatureExtractor(pretrained=pretrained, freeze_feature_extractor=freeze_feature_extractor, feature_extractor_name=feature_extractor_name)
+
         self.num_ftrs = self.feature_extractor.num_features
         self.num_classes = num_classes
 
