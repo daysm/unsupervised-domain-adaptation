@@ -55,7 +55,7 @@ def main(args):
     """Train and evaluate a ResNet18 car model classifier"""
     wandb.init(config=args, project=args.project)
     model = ImageClassifier(
-        feature_extractor_name=args.feature_extractor, freeze_feature_extractor=False, pretrained=True, num_classes=args.num_classes
+        feature_extractor_name=args.feature_extractor, freeze_feature_extractor=args.freeze_feature_extractor, pretrained=True, num_classes=args.num_classes
     )
     model = model.to(device)
     summary(model, input_size=(3, args.input_size, args.input_size))
@@ -258,6 +258,14 @@ if __name__ == "__main__":
         type=str,
         default="dann",
         metavar="M",
+        help="""Which mode? dann: Train on source and target domain, evaluate on target domain,
+            source: train on source domain, evaluate on source domain
+            (evaluate on target domain, if --data-dir-target-domain passed) (default: dann)""",
+    )
+    parser.add_argument(
+        "--freeze-feature-extractor",
+        action='store_true',
+        default=False,
         help="""Which mode? dann: Train on source and target domain, evaluate on target domain,
             source: train on source domain, evaluate on source domain
             (evaluate on target domain, if --data-dir-target-domain passed) (default: dann)""",
