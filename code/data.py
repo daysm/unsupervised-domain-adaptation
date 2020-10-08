@@ -16,60 +16,63 @@ class DaimlerImageFolder(datasets.ImageFolder):
         return img
 
 
-def get_train_val_loaders(
+def get_dataloader(
     data_dir,
     data_transforms,
-    train_size=0.8,
-    batch_size_train=32,
-    batch_size_val=1000,
-    num_train_samples=None,
+    batch_size=32,
+    weighted_sampling=False,
+    num_samples=None,
 ):
     """Get dataloaders for training and validation"""
     dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
 
-    # Split into train and val
-    len_train, len_val = (
-        int(np.floor(len(dataset) * train_size)),
-        int(np.ceil(len(dataset) * (1 - train_size))),
-    )
-    dataset_train, dataset_val = torch.utils.data.random_split(
-        dataset, [len_train, len_val], generator=torch.Generator().manual_seed(0)
-    )
+    if weighted_sampling:
+        sampler = get_weighted_random_sampler(dataset, num_samples=num_samples)
+        dataloader = torch.utils.data.DataLoader(
+            dataset, batch_size=batch_size, sampler=sampler
+        )
+    else:
+        dataloader= torch.utils.data.DataLoader(dataset, batch_size=batch_size)
 
-    # Count class frequencies in training set
-    dataset_train_labels = [dataset.targets[i] for i in dataset_train.indices]
-    class_count_train = {
-        target: dataset_train_labels.count(target)
-        for target in set(dataset_train_labels)
-    }
-    class_count_train = [
-        class_count_train[class_idx] for class_idx in sorted(class_count_train.keys())
-    ]
+    return dataloader
 
-    # One weight for each class
-    weights = 1.0 / torch.tensor(class_count_train).float()
-
-    # Convert to to make compatible with weights
-    dataset_train_labels = torch.LongTensor(dataset_train_labels)
-
-    # One weight for each sample, based on the sample's label
-    sample_weights = weights[dataset_train_labels]
+def get_weighted_random_sampler(dataset, num_samples=None):
+    # Count class frequencies 
+    class_counts = get_class_counts(dataset)
+    sample_weights = get_sample_weights(dataset.targets, class_counts)
 
     # If the target domain dataset is much smaller we can pass the number of
     # training samples to sample directly
-    if num_train_samples is None:
-        num_train_samples = len(dataset_train)
+    if num_samples is None:
+        num_samples = len(dataset)
 
     sampler = torch.utils.data.WeightedRandomSampler(
-        sample_weights, num_train_samples, generator=torch.Generator().manual_seed(0)
+        sample_weights, num_samples, generator=torch.Generator().manual_seed(0)
     )
-    dataloader_train = torch.utils.data.DataLoader(
-        dataset_train, batch_size=batch_size_train, sampler=sampler
-    )
-    dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=batch_size_val)
 
-    return dataloader_train, dataloader_val
+    return sampler
 
+def get_class_counts(dataset):
+    class_counts = {
+        target: dataset.targets.count(target)
+        for target in set(dataset.targets)
+    }
+    class_counts = [
+        class_counts[class_idx] for class_idx in sorted(class_counts.keys())
+    ]
+    return class_counts
+
+def get_sample_weights(dataset_labels, class_counts):
+    # One weight for each class
+    weights = 1.0 / torch.tensor(class_counts).float()
+
+    # Convert to to make compatible with weights
+    dataset_labels = torch.LongTensor(dataset_labels)
+
+    # One weight for each sample, based on the sample's label
+    sample_weights = weights[dataset_labels]
+
+    return sample_weights
 
 if __name__ == "__main__":
     input_size = 224
@@ -81,13 +84,16 @@ if __name__ == "__main__":
         [transforms.Resize((input_size, input_size)), transforms.ToTensor(), normalize]
     )
 
-    dataloader_synth_train, dataloader_synth_val = get_train_val_loaders(
-        "data/synthetic_new_for_model_classification_fixed_cropped",
-        transforms,
-        train_size=0.8,
+    dataloader = get_dataloader(
+        "data/real_new_for_model_classification_cropped_cleaned_test_set",
+        data_transforms,
+        batch_size=32,
+        weighted_sampling=False,
+        # num_samples=1000
     )
-    dataloader_dealer_train, dataloader_dealer_val = get_train_val_loaders(
-        "data/real_new_for_model_classification_cropped_cleaned",
-        transforms,
-        train_size=0.8,
-    )
+    labels = []
+    for batch in dataloader:
+        labels.extend(batch[1].tolist())
+    print(labels)
+    for i in range(10):
+        print(labels.count(i))

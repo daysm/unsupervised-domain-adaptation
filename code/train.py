@@ -18,7 +18,7 @@ import wandb
 from dotenv import load_dotenv
 
 from models import ImageClassifier
-from data import get_train_val_loaders
+from data import get_dataloader
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -77,24 +77,21 @@ def main(args):
         ]
     )
 
-    ## Source data
-    if args.mode == "dann":
-        train_size = 1  # Train on full source dataset when using DANN
-    else:
-        train_size = args.train_size
-    dataloader_source_train, dataloader_source_val = get_train_val_loaders(
-        args.data_dir_source_domain, data_transforms, train_size=train_size
-    )
+    dataloader_source_train = get_dataloader(args.data_dir_source_domain_train, data_transforms, args.batch_size, weighted_sampling=True)
+    print(len(dataloader_source_train))
+    print(len(dataloader_source_train.dataset))
+    dataloader_val = get_dataloader(args.data_dir_val, data_transforms, args.batch_size_test)
+    print(len(dataloader_val))
+    print(len(dataloader_val.dataset))
 
-    ## Target data
-    # Resample target images to match the number of synthetic images
-    num_train_samples = len(dataloader_source_train.dataset)
-    dataloader_target_train, dataloader_target_val = get_train_val_loaders(
-        args.data_dir_target_domain,
-        data_transforms,
-        train_size=args.train_size,
-        num_train_samples=num_train_samples,
-    )
+    if args.data_dir_target_domain_train:
+        if args.mode == 'dann':
+            num_samples = len(dataloader_source_train.dataset)
+        elif args.mode == 'source':
+            num_samples = None
+        dataloader_target_train = get_dataloader(args.data_dir_target_domain_train, data_transforms, args.batch_size, weighted_sampling=True, num_samples=num_samples)
+        print(len(dataloader_target_train))
+        print(len(dataloader_target_train.dataset))
 
     # TODO: Do I need to check whether param.requires_grad == True?
     optimizer = optim.SGD(
@@ -107,14 +104,14 @@ def main(args):
         model,
         dataloader_source_train,
         dataloader_target_train,
-        dataloader_target_val,
+        dataloader_val,
         optimizer,
         args,
     )
 
 
 def train(
-    model, data_loader_source, data_loader_target, data_loader_val, optimizer, args
+    model=None, data_loader_source=None, data_loader_target=None, data_loader_val=None, optimizer=None, args=None
 ):
     """Train a model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
 
@@ -266,9 +263,7 @@ if __name__ == "__main__":
         "--freeze-feature-extractor",
         action='store_true',
         default=False,
-        help="""Which mode? dann: Train on source and target domain, evaluate on target domain,
-            source: train on source domain, evaluate on source domain
-            (evaluate on target domain, if --data-dir-target-domain passed) (default: dann)""",
+        help="""Freeze feature extractor""",
     )
     parser.add_argument(
         "--batch-size",
@@ -278,7 +273,7 @@ if __name__ == "__main__":
         help="input batch size for training (default: 64)",
     )
     parser.add_argument(
-        "--test-batch-size",
+        "--batch-size-test",
         type=int,
         default=1000,
         metavar="N",
@@ -357,17 +352,24 @@ if __name__ == "__main__":
         default=os.environ["SM_MODEL_DIR"] if "SM_MODEL_DIR" in os.environ else None,
     )
     parser.add_argument(
-        "--data-dir-source-domain",
+        "--data-dir-source-domain-train",
         type=str,
-        default=os.environ["SM_CHANNEL_SOURCE"]
-        if "SM_CHANNEL_SOURCE" in os.environ
+        default=os.environ["SM_CHANNEL_SOURCE_TRAIN"]
+        if "SM_CHANNEL_SOURCE_TRAIN" in os.environ
         else None,
     )
     parser.add_argument(
-        "--data-dir-target-domain",
+        "--data-dir-target-domain-train",
         type=str,
-        default=os.environ["SM_CHANNEL_TARGET"]
-        if "SM_CHANNEL_TARGET" in os.environ
+        default=os.environ["SM_CHANNEL_TARGET_TRAIN"]
+        if "SM_CHANNEL_TARGET_TRAIN" in os.environ
+        else None,
+    )
+    parser.add_argument(
+        "--data-dir-val",
+        type=str,
+        default=os.environ["SM_CHANNEL_VAL"]
+        if "SM_CHANNEL_VAL" in os.environ
         else None,
     )
     parser.add_argument(
