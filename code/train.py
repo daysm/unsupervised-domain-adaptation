@@ -2,7 +2,9 @@ import argparse
 import json
 import logging
 import os
+from pathlib import Path
 import copy
+from datetime import datetime
 import sys
 import time
 import torch
@@ -35,7 +37,7 @@ load_dotenv(dotenv_path)
 
 
 def model_fn(model_dir):
-    """Load model from file"""
+    """Load model from file for SageMaker"""
     logger.info("Loading the model.")
     model = ImageClassifier()
     with open(os.path.join(model_dir, "model.pth"), "rb") as f:
@@ -44,11 +46,48 @@ def model_fn(model_dir):
 
 
 def save_model(model, model_dir):
-    """Save model to file"""
+    """Save model to file for SageMaker"""
     logger.info("Saving the model.")
     path = os.path.join(model_dir, "model.pth")
     # Recommended way from http://pytorch.org/docs/master/notes/serialization.html
     torch.save(model.cpu().state_dict(), path)
+
+def save_checkpoint(checkpoint_dir, run_name=None, checkpoint_name=None, model=None, optimizer=None, epoch=0, loss=None, args=None):
+    """Save checkpoint"""
+    logger.info("Saving checkpoint...")
+
+    # Get checkpoint path
+    run_checkpoint_dir = Path.cwd() / checkpoint_dir / run_name
+    run_checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = run_checkpoint_dir / checkpoint_name
+    config_path = run_checkpoint_dir / "config.json"
+
+    checkpoint = {
+            'epoch': epoch,
+            'loss': loss,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'args': args
+            }
+
+    with open(config_path, 'w') as f:
+        json.dump(vars(args), f, sort_keys=True, indent=4, separators=(',', ': '))
+
+    # Recommended way from http://pytorch.org/docs/master/notes/serialization.html
+    torch.save(checkpoint, checkpoint_path)
+
+
+def load_checkpoint(checkpoint, model, optimizer):
+    """Load checkpoint
+    checkpoint is the path of the checkpoint
+    """
+    logger.info("Loading checkpoint")
+    checkpoint = torch.load(checkpoint)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+    return model, optimizer, epoch, loss
 
 
 def main(args):
@@ -77,21 +116,23 @@ def main(args):
         ]
     )
 
-    dataloader_source_train = get_dataloader(args.data_dir_source_domain_train, data_transforms, args.batch_size, weighted_sampling=True)
-    print(len(dataloader_source_train))
-    print(len(dataloader_source_train.dataset))
-    dataloader_val = get_dataloader(args.data_dir_val, data_transforms, args.batch_size_test)
-    print(len(dataloader_val))
-    print(len(dataloader_val.dataset))
+    dataloader_source_train = None
+    if args.data_dir_train_source is not None:
+        dataloader_source_train = get_dataloader(args.data_dir_train_source, data_transforms, args.batch_size, weighted_sampling=True)
+    
+    dataloader_val = None
+    if args.data_dir_val is not None:
+        dataloader_val = get_dataloader(args.data_dir_val, data_transforms, args.batch_size_test)
 
-    if args.data_dir_target_domain_train:
+
+    dataloader_target_train = None
+    if args.data_dir_train_target:
         if args.mode == 'dann':
             num_samples = len(dataloader_source_train.dataset)
         elif args.mode == 'source':
             num_samples = None
-        dataloader_target_train = get_dataloader(args.data_dir_target_domain_train, data_transforms, args.batch_size, weighted_sampling=True, num_samples=num_samples)
-        print(len(dataloader_target_train))
-        print(len(dataloader_target_train.dataset))
+        dataloader_target_train = get_dataloader(args.data_dir_train_target, data_transforms, args.batch_size, weighted_sampling=True, num_samples=num_samples)
+
 
     # TODO: Do I need to check whether param.requires_grad == True?
     optimizer = optim.SGD(
@@ -100,34 +141,51 @@ def main(args):
         momentum=args.momentum,
     )
 
-    train(
-        model,
-        dataloader_source_train,
-        dataloader_target_train,
-        dataloader_val,
-        optimizer,
-        args,
-    )
+    now = datetime.now()
+    args.run_name = f"{now.timestamp()}-{now.strftime('%Y-%m-%d-%H-%M-%S')}-{args.run_name}"
+
+    # Load checkpoint
+    completed_epochs = 0
+    if args.checkpoint is not None:
+        model, optimizer, completed_epochs, loss = load_checkpoint(args.checkpoint, model, optimizer)
+
+    if dataloader_source_train is not None:
+        train(
+            model,
+            dataloader_source_train,
+            dataloader_target_train,
+            dataloader_val,
+            optimizer,
+            completed_epochs,
+            args,
+        )
+
+    if dataloader_source_train is None and dataloader_val is not None:
+        acc = test(model, dataloader_val)
 
 
 def train(
-    model=None, data_loader_source=None, data_loader_target=None, data_loader_val=None, optimizer=None, args=None
+    model=None, data_loader_source=None, data_loader_target=None, data_loader_val=None, optimizer=None, completed_epochs=None, args=None
 ):
     """Train a model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
 
-    best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0
+    best_epoch_loss_label_src = sys.float_info.max
     val_acc_history = []
 
-    for epoch in range(1, args.epochs + 1):
-        len_dataloader = min(len(data_loader_source), len(data_loader_target))
+    for epoch in range(completed_epochs + 1, completed_epochs + args.epochs + 1):
+        len_dataloader = len(data_loader_source)
+        if data_loader_target is not None and args.mode == "dann":
+            len_dataloader = min(len(data_loader_source), len(data_loader_target))
+            data_target_iter = iter(data_loader_target)
         data_source_iter = iter(data_loader_source)
-        data_target_iter = iter(data_loader_target)
         loss_label_classifier = torch.nn.CrossEntropyLoss()
         loss_domain_classifier = torch.nn.CrossEntropyLoss()
 
+        running_loss_label_src = 0
+
         model.train()
-        for i in range(len_dataloader):
+        for i in range(1, len_dataloader+1):
 
             # Training with source data
             data_source = data_source_iter.next()
@@ -143,18 +201,22 @@ def train(
             batch_acc_domain_src = domain_preds.eq(src_domain).sum().item() / src_domain.size(0)
 
             err_src_label = loss_label_classifier(class_output, src_label)
+            running_loss_label_src += err_src_label.data.cpu().item()
             err_src_domain = loss_domain_classifier(domain_output, src_domain)
 
             # Training with target data
-            data_target = data_target_iter.next()
-            tgt_img, tgt_label = data_target
-            tgt_img, tgt_label = tgt_img.to(device), tgt_label.to(device)
-            tgt_domain = torch.ones_like(tgt_label)
-            tgt_domain = tgt_domain.to(device)
-            _, domain_output = model(tgt_img)
-            domain_preds = domain_output.argmax(dim=1)
-            batch_acc_domain_tgt = domain_preds.eq(tgt_domain).sum().item() / tgt_domain.size(0)
-            err_tgt_domain = loss_domain_classifier(domain_output, tgt_domain)
+            err_tgt_domain = torch.FloatTensor(1).fill_(0)
+            batch_acc_domain_tgt = 0
+            if data_loader_target is not None and args.mode == "dann":
+                data_target = data_target_iter.next()
+                tgt_img, tgt_label = data_target
+                tgt_img, tgt_label = tgt_img.to(device), tgt_label.to(device)
+                tgt_domain = torch.ones_like(tgt_label)
+                tgt_domain = tgt_domain.to(device)
+                _, domain_output = model(tgt_img)
+                domain_preds = domain_output.argmax(dim=1)
+                batch_acc_domain_tgt = domain_preds.eq(tgt_domain).sum().item() / tgt_domain.size(0)
+                err_tgt_domain = loss_domain_classifier(domain_output, tgt_domain)
 
             if args.mode == "dann":
                 err = err_src_label + err_tgt_domain + err_src_domain
@@ -188,14 +250,20 @@ def train(
                 }
             )
         
-        acc = test(model, data_loader_val)
-        if acc > best_acc:
-            best_acc = acc
-            best_model_wts = copy.deepcopy(model.state_dict())
-        val_acc_history.append(acc)
+        epoch_loss_label_src = running_loss_label_src / len_dataloader
+        print(
+            "epoch: %d, err_src_label: %f" % (epoch, epoch_loss_label_src)
+        )
+        save_checkpoint(checkpoint_dir=args.checkpoint_dir, run_name=args.run_name, checkpoint_name="latest.pt", model=model, optimizer=optimizer, epoch=epoch, args=args)
 
-    model.load_state_dict(best_model_wts)
-    save_model(model, args.model_dir)
+        if data_loader_val is not None:
+            acc = test(model, data_loader_val)
+            val_acc_history.append(acc)
+
+        if epoch_loss_label_src < best_epoch_loss_label_src:
+            best_epoch_loss_label_src = epoch_loss_label_src
+            save_checkpoint(checkpoint_dir=args.checkpoint_dir, run_name=args.run_name, checkpoint_name="best.pt", model=model, epoch=epoch, optimizer=optimizer, args=args)
+
     return model, val_acc_history
 
 
@@ -217,7 +285,7 @@ def test(model, data_loader):
     test_loss /= len(data_loader.dataset)
     acc = correct / len(data_loader.dataset)
     print(
-        "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.4f}%)\n".format(
+        "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.4f})\n".format(
             test_loss, correct, len(data_loader.dataset), acc,
         )
     )
@@ -229,6 +297,13 @@ def test(model, data_loader):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        default="",
+        metavar="E",
+        help="What is this run called?",
+    )
     parser.add_argument(
         "--input-size",
         type=int,
@@ -352,14 +427,22 @@ if __name__ == "__main__":
         default=os.environ["SM_MODEL_DIR"] if "SM_MODEL_DIR" in os.environ else None,
     )
     parser.add_argument(
-        "--data-dir-source-domain-train",
+        "--checkpoint-dir",
+        type=str,
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+    )
+    parser.add_argument(
+        "--data-dir-train-source",
         type=str,
         default=os.environ["SM_CHANNEL_SOURCE_TRAIN"]
         if "SM_CHANNEL_SOURCE_TRAIN" in os.environ
         else None,
     )
     parser.add_argument(
-        "--data-dir-target-domain-train",
+        "--data-dir-train-target",
         type=str,
         default=os.environ["SM_CHANNEL_TARGET_TRAIN"]
         if "SM_CHANNEL_TARGET_TRAIN" in os.environ
