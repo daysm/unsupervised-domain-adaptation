@@ -92,7 +92,6 @@ def load_checkpoint(checkpoint, model, optimizer):
 
 def main(args):
     """Train and evaluate a ResNet18 car model classifier"""
-    wandb.init(config=args, project=args.project)
     model = ImageClassifier(
         feature_extractor_name=args.feature_extractor, freeze_feature_extractor=args.freeze_feature_extractor, pretrained=True, num_classes=args.num_classes
     )
@@ -169,6 +168,7 @@ def train(
 ):
     """Train a model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
 
+    wandb.init(config=args, project=args.project)
     best_acc = 0
     best_epoch_loss_label_src = sys.float_info.max
     val_acc_history = []
