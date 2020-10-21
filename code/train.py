@@ -289,7 +289,6 @@ def test(model, data_loader):
             test_loss, correct, len(data_loader.dataset), acc,
         )
     )
-    wandb.log({"loss_tgt_label_val": test_loss, "acc_val": acc})
 
     return acc
 
