@@ -164,13 +164,13 @@ def main(args):
 
 
 def train(
-    model=None, data_loader_source=None, data_loader_target=None, data_loader_val=None, optimizer=None, completed_epochs=None, args=None
+    model=None, data_loader_source=None, data_loader_target=None, data_loader_val=None, optimizer=None, completed_epochs=None, loss=None, args=None
 ):
     """Train a model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
 
     wandb.init(config=args, project=args.project)
     best_acc = 0
-    best_epoch_loss_label_src = sys.float_info.max
+    best_epoch_loss_label_src = sys.float_info.max if loss is None else loss
     val_acc_history = []
 
     for epoch in range(completed_epochs + 1, completed_epochs + args.epochs + 1):
@@ -254,7 +254,7 @@ def train(
         print(
             "epoch: %d, err_src_label: %f" % (epoch, epoch_loss_label_src)
         )
-        save_checkpoint(checkpoint_dir=args.checkpoint_dir, run_name=args.run_name, checkpoint_name="latest.pt", model=model, optimizer=optimizer, epoch=epoch, args=args)
+
 
         if data_loader_val is not None:
             acc = test(model, data_loader_val)
@@ -262,7 +262,8 @@ def train(
 
         if epoch_loss_label_src < best_epoch_loss_label_src:
             best_epoch_loss_label_src = epoch_loss_label_src
-            save_checkpoint(checkpoint_dir=args.checkpoint_dir, run_name=args.run_name, checkpoint_name="best.pt", model=model, epoch=epoch, optimizer=optimizer, args=args)
+            save_checkpoint(checkpoint_dir=args.checkpoint_dir, run_name=args.run_name, checkpoint_name="best.pt", model=model, epoch=epoch, loss=best_epoch_loss_label_src, optimizer=optimizer, args=args)
+        save_checkpoint(checkpoint_dir=args.checkpoint_dir, run_name=args.run_name, checkpoint_name="latest.pt", model=model, optimizer=optimizer, epoch=epoch, loss=best_epoch_loss_label_src, args=args)
 
     return model, val_acc_history
 
