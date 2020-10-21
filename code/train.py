@@ -118,7 +118,7 @@ def main(args):
 
     dataloader_source_train = None
     if args.data_dir_train_source is not None:
-        dataloader_source_train = get_dataloader(args.data_dir_train_source, data_transforms, args.batch_size, weighted_sampling=True)
+        dataloader_source_train = get_dataloader(args.data_dir_train_source, data_transforms, args.batch_size, weighted_sampling=True, num_workers=args.workers)
     
     dataloader_val = None
     if args.data_dir_val is not None:
@@ -460,5 +460,7 @@ if __name__ == "__main__":
         type=int,
         default=os.environ["SM_NUM_GPUS"] if "SM_NUM_GPUS" in os.environ else None,
     )
+    parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+        help='number of data loading workers (default: 4)')
 
     main(parser.parse_args())

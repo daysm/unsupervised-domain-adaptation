@@ -22,6 +22,7 @@ def get_dataloader(
     batch_size=32,
     weighted_sampling=False,
     num_samples=None,
+    num_workers=4,
 ):
     """Get dataloaders for training and validation"""
     dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
@@ -29,10 +30,10 @@ def get_dataloader(
     if weighted_sampling:
         sampler = get_weighted_random_sampler(dataset, num_samples=num_samples)
         dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=batch_size, sampler=sampler
+            dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers, pin_memory=True
         )
     else:
-        dataloader= torch.utils.data.DataLoader(dataset, batch_size=batch_size)
+        dataloader= torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=True)
 
     return dataloader
 
