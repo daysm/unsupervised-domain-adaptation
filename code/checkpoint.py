@@ -1,3 +1,15 @@
+import os
+import sys
+from pathlib import Path
+import json
+import logging
+import torch
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler(sys.stdout))
+
+
 def model_fn(model_dir):
     """Load model from file for SageMaker"""
     logger.info("Loading the model.")

@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import json
 from pathlib import Path
 import copy
 from datetime import datetime
@@ -22,10 +23,6 @@ from dotenv import load_dotenv
 from models import ImageClassifier
 from data import get_dataloader
 from checkpoint import model_fn, save_model, load_checkpoint, save_checkpoint
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 # Torch setup
@@ -196,7 +193,6 @@ def train(
     args=None,
 ):
     """Train a model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
-    print(args)
     wandb.init(config=args, project=args.project, name=args.run_name)
     best_acc = 0
     best_epoch_loss_label_src = sys.float_info.max if loss is None else loss
