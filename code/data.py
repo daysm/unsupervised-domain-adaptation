@@ -30,15 +30,22 @@ def get_dataloader(
     if weighted_sampling:
         sampler = get_weighted_random_sampler(dataset, num_samples=num_samples)
         dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers, pin_memory=True
+            dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            num_workers=num_workers,
+            pin_memory=True,
         )
     else:
-        dataloader= torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=True)
+        dataloader = torch.utils.data.DataLoader(
+            dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=True
+        )
 
     return dataloader
 
+
 def get_weighted_random_sampler(dataset, num_samples=None):
-    # Count class frequencies 
+    # Count class frequencies
     class_counts = get_class_counts(dataset)
     sample_weights = get_sample_weights(dataset.targets, class_counts)
 
@@ -53,15 +60,16 @@ def get_weighted_random_sampler(dataset, num_samples=None):
 
     return sampler
 
+
 def get_class_counts(dataset):
     class_counts = {
-        target: dataset.targets.count(target)
-        for target in set(dataset.targets)
+        target: dataset.targets.count(target) for target in set(dataset.targets)
     }
     class_counts = [
         class_counts[class_idx] for class_idx in sorted(class_counts.keys())
     ]
     return class_counts
+
 
 def get_sample_weights(dataset_labels, class_counts):
     # One weight for each class
@@ -74,6 +82,7 @@ def get_sample_weights(dataset_labels, class_counts):
     sample_weights = weights[dataset_labels]
 
     return sample_weights
+
 
 if __name__ == "__main__":
     input_size = 224

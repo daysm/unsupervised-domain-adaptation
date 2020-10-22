@@ -18,6 +18,7 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
+
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
@@ -85,11 +86,13 @@ class FeatureExtractor(nn.Module):
         
         """
         super().__init__()
-        if feature_extractor_name == 'resnet18':
+        if feature_extractor_name == "resnet18":
             self.feature_extractor = models.resnet18(pretrained=pretrained)
             self.num_features = self.feature_extractor.fc.in_features
-            self.feature_extractor.fc = Identity()  # Disable last fc layer, use ResNet only as feature extractor
-        if feature_extractor_name == 'alexnet':
+            self.feature_extractor.fc = (
+                Identity()
+            )  # Disable last fc layer, use ResNet only as feature extractor
+        if feature_extractor_name == "alexnet":
             self.feature_extractor = models.alexnet(pretrained=pretrained)
             self.num_features = self.feature_extractor.classifier[6].in_features
             self.feature_extractor.classifier[6] = Identity()
@@ -109,15 +112,11 @@ class FeatureExtractorMNIST(nn.Module):
     def __init__(self, pretrained, freeze_feature_extractor):
         super().__init__()
         self.feature_extractor = nn.Sequential()
-        self.feature_extractor.add_module(
-            "f_conv1", nn.Conv2d(3, 64, kernel_size=5)
-        )
+        self.feature_extractor.add_module("f_conv1", nn.Conv2d(3, 64, kernel_size=5))
         self.feature_extractor.add_module("f_bn1", nn.BatchNorm2d(64))
         self.feature_extractor.add_module("f_pool1", nn.MaxPool2d(2))
         self.feature_extractor.add_module("f_relu1", nn.ReLU())
-        self.feature_extractor.add_module(
-            "f_conv2", nn.Conv2d(64, 50, kernel_size=5)
-        )
+        self.feature_extractor.add_module("f_conv2", nn.Conv2d(64, 50, kernel_size=5))
         self.feature_extractor.add_module("f_bn2", nn.BatchNorm2d(50))
         self.feature_extractor.add_module("f_drop1", nn.Dropout2d())
         self.feature_extractor.add_module("f_pool2", nn.MaxPool2d(2))
@@ -130,9 +129,14 @@ class FeatureExtractorMNIST(nn.Module):
         return self.feature_extractor(x)
 
 
-
 class ImageClassifier(nn.Module):
-    def __init__(self, num_classes=10, pretrained=True, freeze_feature_extractor=False, feature_extractor_name='resnet18'):
+    def __init__(
+        self,
+        num_classes=10,
+        pretrained=True,
+        freeze_feature_extractor=False,
+        feature_extractor_name="resnet18",
+    ):
         """
         num_classes: number of classes for classification
         pretrained: use pretrained weights (trained on ImageNet)
@@ -146,10 +150,14 @@ class ImageClassifier(nn.Module):
         if feature_extractor_name == "mnist_extractor":
             print("Extracting for MNIST")
             self.feature_extractor = FeatureExtractorMNIST(
-            pretrained=pretrained, freeze_feature_extractor=freeze_feature_extractor
-        )
+                pretrained=pretrained, freeze_feature_extractor=freeze_feature_extractor
+            )
         else:
-            self.feature_extractor = FeatureExtractor(pretrained=pretrained, freeze_feature_extractor=freeze_feature_extractor, feature_extractor_name=feature_extractor_name)
+            self.feature_extractor = FeatureExtractor(
+                pretrained=pretrained,
+                freeze_feature_extractor=freeze_feature_extractor,
+                feature_extractor_name=feature_extractor_name,
+            )
 
         self.num_ftrs = self.feature_extractor.num_features
         self.num_classes = num_classes
