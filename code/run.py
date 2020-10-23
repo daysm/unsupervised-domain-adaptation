@@ -34,62 +34,9 @@ dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
 
 
-# def model_fn(model_dir):
-#     """Load model from file for SageMaker"""
-#     logger.info("Loading the model.")
-#     model = ImageClassifier()
-#     with open(os.path.join(model_dir, "model.pth"), "rb") as f:
-#         model.load_state_dict(torch.load(f))
-#     return model.to(device)
-
-
-# def save_model(model, model_dir):
-#     """Save model to file for SageMaker"""
-#     logger.info("Saving the model.")
-#     path = os.path.join(model_dir, "model.pth")
-#     # Recommended way from http://pytorch.org/docs/master/notes/serialization.html
-#     torch.save(model.cpu().state_dict(), path)
-
-# def save_checkpoint(checkpoint_dir, run_name=None, checkpoint_name=None, model=None, optimizer=None, epoch=0, loss=None, args=None):
-#     """Save checkpoint"""
-#     logger.info("Saving checkpoint...")
-
-#     # Get checkpoint path
-#     run_checkpoint_dir = Path.cwd() / checkpoint_dir / run_name
-#     run_checkpoint_dir.mkdir(parents=True, exist_ok=True)
-#     checkpoint_path = run_checkpoint_dir / checkpoint_name
-#     config_path = run_checkpoint_dir / "config.json"
-
-#     checkpoint = {
-#             'epoch': epoch,
-#             'loss': loss,
-#             'model_state_dict': model.state_dict(),
-#             'optimizer_state_dict': optimizer.state_dict(),
-#             'args': args
-#             }
-
-#     with open(config_path, 'w') as f:
-#         json.dump(vars(args), f, sort_keys=True, indent=4, separators=(',', ': '))
-
-#     # Recommended way from http://pytorch.org/docs/master/notes/serialization.html
-#     torch.save(checkpoint, checkpoint_path)
-
-
-# def load_checkpoint(checkpoint, model, optimizer):
-#     """Load checkpoint
-#     checkpoint is the path of the checkpoint
-#     """
-#     logger.info("Loading checkpoint")
-#     checkpoint = torch.load(checkpoint)
-#     model.load_state_dict(checkpoint['model_state_dict'])
-#     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-#     epoch = checkpoint['epoch']
-#     loss = checkpoint['loss']
-#     return model, optimizer, epoch, loss
-
-
 def main(args):
     """Train and evaluate a ResNet18 car model classifier"""
+    print(args)
     model = ImageClassifier(
         feature_extractor_name=args.feature_extractor,
         freeze_feature_extractor=args.freeze_feature_extractor,
@@ -117,7 +64,7 @@ def main(args):
     )
 
     dataloader_source_train = None
-    if args.data_dir_train_source is not None:
+    if args.data_dir_train_source:
         dataloader_source_train = get_dataloader(
             args.data_dir_train_source,
             data_transforms,
@@ -479,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir-train-source",
         type=str,
+        action='append',
         default=os.environ["SM_CHANNEL_SOURCE_TRAIN"]
         if "SM_CHANNEL_SOURCE_TRAIN" in os.environ
         else None,
@@ -486,12 +434,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir-train-target",
         type=str,
+        action='append',
         default=os.environ["SM_CHANNEL_TARGET_TRAIN"]
         if "SM_CHANNEL_TARGET_TRAIN" in os.environ
         else None,
     )
     parser.add_argument(
         "--data-dir-val",
+        action='append',
         type=str,
         default=os.environ["SM_CHANNEL_VAL"]
         if "SM_CHANNEL_VAL" in os.environ

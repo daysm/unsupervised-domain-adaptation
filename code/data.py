@@ -16,8 +16,18 @@ class DaimlerImageFolder(datasets.ImageFolder):
         return img
 
 
+class ConcatDataset(torch.utils.data.ConcatDataset):
+    """A wrapper around ConcatDataset"""
+
+    def __init__(self, datasets):
+        super().__init__(datasets)
+        self.targets = []
+        for dataset in self.datasets:
+            self.targets.extend(dataset.targets) 
+
+
 def get_dataloader(
-    data_dir,
+    data_dirs,
     data_transforms,
     batch_size=32,
     weighted_sampling=False,
@@ -25,7 +35,11 @@ def get_dataloader(
     num_workers=4,
 ):
     """Get dataloaders for training and validation"""
-    dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
+    all_datasets = []
+    for data_dir in data_dirs:
+        dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
+        all_datasets.append(dataset)
+    dataset = ConcatDataset(all_datasets)
 
     if weighted_sampling:
         sampler = get_weighted_random_sampler(dataset, num_samples=num_samples)
@@ -95,15 +109,15 @@ if __name__ == "__main__":
     )
 
     dataloader = get_dataloader(
-        "data/real_new_for_model_classification_cropped_cleaned_test_set",
+        ["data/real_new_for_model_classification_cropped_cleaned_test_set", "data/real_new_for_model_classification_cropped_cleaned_training_set"],
         data_transforms,
         batch_size=32,
-        weighted_sampling=False,
+        weighted_sampling=True,
         # num_samples=1000
     )
-    labels = []
-    for batch in dataloader:
-        labels.extend(batch[1].tolist())
-    print(labels)
-    for i in range(10):
-        print(labels.count(i))
+    # labels = []
+    # for batch in dataloader:
+    #     labels.extend(batch[1].tolist())
+    # print(labels)
+    # for i in range(10):
+    #     print(labels.count(i))
