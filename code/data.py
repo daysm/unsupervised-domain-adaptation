@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import torchvision
+from PIL import Image
 from torchvision import datasets, models, transforms
 from torch.utils.data import WeightedRandomSampler
 
@@ -16,18 +17,8 @@ class DaimlerImageFolder(datasets.ImageFolder):
         return img
 
 
-class ConcatDataset(torch.utils.data.ConcatDataset):
-    """A wrapper around ConcatDataset"""
-
-    def __init__(self, datasets):
-        super().__init__(datasets)
-        self.targets = []
-        for dataset in self.datasets:
-            self.targets.extend(dataset.targets)
-
-
 def get_dataloader(
-    data_dirs,
+    data_dir,
     data_transforms,
     batch_size=32,
     weighted_sampling=False,
@@ -35,11 +26,7 @@ def get_dataloader(
     num_workers=4,
 ):
     """Get dataloaders for training and validation"""
-    all_datasets = []
-    for data_dir in data_dirs:
-        dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
-        all_datasets.append(dataset)
-    dataset = ConcatDataset(all_datasets)
+    dataset = DaimlerImageFolder(root=data_dir, transform=data_transforms)
 
     if weighted_sampling:
         sampler = get_weighted_random_sampler(dataset, num_samples=num_samples)

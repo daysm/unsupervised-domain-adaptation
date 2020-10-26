@@ -141,7 +141,7 @@ def train(
 ):
     """Train a model with a ResNet18 feature extractor on data from the primary and auxiliary domain(s), adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
     wandb.init(config=args, project=args.project, name=args.run_name)
-    best_acc = 0
+    best_acc = 0.0
     best_epoch_loss_label_primary = sys.float_info.max if loss is None else loss
     val_acc_history = []
 
@@ -237,6 +237,8 @@ def train(
         if dataloader_val is not None:
             acc = test(model, dataloader_val)
             val_acc_history.append(acc)
+            if acc > best_acc:
+                best_acc = acc
 
         if epoch_loss_label_primary < best_epoch_loss_label_primary:
             best_epoch_loss_label_primary = epoch_loss_label_primary
@@ -292,7 +294,6 @@ def test(model, dataloader):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
     parser.add_argument(
         "--run-name",
         type=str,
@@ -326,9 +327,8 @@ if __name__ == "__main__":
         type=str,
         default="dann",
         metavar="M",
-        help="""Which mode? dann: Train on source and target domain, evaluate on target domain,
-            source: train on source domain, evaluate on source domain
-            (evaluate on target domain, if --data-dir-target-domain passed) (default: dann)""",
+        help="""Which mode? dann: Train on primary and auxilary domain(s),
+            source: train on primary domain (default: dann)""",
     )
     parser.add_argument(
         "--freeze-feature-extractor",
@@ -431,7 +431,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir-train-primary",
         type=str,
-        action="append",
+        # action="append",
         default=os.environ["SM_CHANNEL_PRIMARY_TRAIN"]
         if "SM_CHANNEL_PRIMARY_TRAIN" in os.environ
         else None,
@@ -439,14 +439,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir-train-aux",
         type=str,
-        action="append",
+        # action="append",
         default=os.environ["SM_CHANNEL_AUX_TRAIN"]
         if "SM_CHANNEL_AUX_TRAIN" in os.environ
         else None,
     )
     parser.add_argument(
         "--data-dir-val",
-        action="append",
+        # action="append",
         type=str,
         default=os.environ["SM_CHANNEL_VAL"]
         if "SM_CHANNEL_VAL" in os.environ
