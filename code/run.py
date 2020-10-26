@@ -63,10 +63,10 @@ def main(args):
         ]
     )
 
-    dataloader_source_train = None
-    if args.data_dir_train_source:
-        dataloader_source_train = get_dataloader(
-            args.data_dir_train_source,
+    dataloader_primary_train = None
+    if args.data_dir_train_primary:
+        dataloader_primary_train = get_dataloader(
+            args.data_dir_train_primary,
             data_transforms,
             args.batch_size,
             weighted_sampling=True,
@@ -79,14 +79,14 @@ def main(args):
             args.data_dir_val, data_transforms, args.batch_size_test
         )
 
-    dataloader_target_train = None
-    if args.data_dir_train_target:
+    dataloader_aux_train = None
+    if args.data_dir_train_aux:
         if args.mode == "dann":
-            num_samples = len(dataloader_source_train.dataset)
+            num_samples = len(dataloader_primary_train.dataset)
         elif args.mode == "source":
             num_samples = None
-        dataloader_target_train = get_dataloader(
-            args.data_dir_train_target,
+        dataloader_aux_train = get_dataloader(
+            args.data_dir_train_aux,
             data_transforms,
             args.batch_size,
             weighted_sampling=True,
@@ -113,135 +113,140 @@ def main(args):
             args.checkpoint, model, optimizer
         )
 
-    if dataloader_source_train is not None:
+    if dataloader_primary_train is not None:
         train(
             model=model,
-            data_loader_source=dataloader_source_train,
-            data_loader_target=dataloader_target_train,
-            data_loader_val=dataloader_val,
+            dataloader_primary=dataloader_primary_train,
+            dataloader_aux=dataloader_aux_train,
+            dataloader_val=dataloader_val,
             optimizer=optimizer,
             completed_epochs=completed_epochs,
             loss=loss,
             args=args,
         )
 
-    if dataloader_source_train is None and dataloader_val is not None:
+    if dataloader_primary_train is None and dataloader_val is not None:
         acc = test(model, dataloader_val)
 
 
 def train(
     model=None,
-    data_loader_source=None,
-    data_loader_target=None,
-    data_loader_val=None,
+    dataloader_primary=None,
+    dataloader_aux=None,
+    dataloader_val=None,
     optimizer=None,
     completed_epochs=None,
     loss=None,
     args=None,
 ):
-    """Train a model with a ResNet18 feature extractor on data from the source and target domain, adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
+    """Train a model with a ResNet18 feature extractor on data from the primary and auxiliary domain(s), adapted from: https://github.com/fungtion/DANN_py3/blob/master/main.py"""
     wandb.init(config=args, project=args.project, name=args.run_name)
     best_acc = 0
-    best_epoch_loss_label_src = sys.float_info.max if loss is None else loss
+    best_epoch_loss_label_primary = sys.float_info.max if loss is None else loss
     val_acc_history = []
 
     for epoch in range(completed_epochs + 1, completed_epochs + args.epochs + 1):
-        len_dataloader = len(data_loader_source)
-        if data_loader_target is not None and args.mode == "dann":
-            len_dataloader = min(len(data_loader_source), len(data_loader_target))
-            data_target_iter = iter(data_loader_target)
-        data_source_iter = iter(data_loader_source)
+        len_dataloader = len(dataloader_primary)
+        if dataloader_aux is not None and args.mode == "dann":
+            len_dataloader = min(len(dataloader_primary), len(dataloader_aux))
+            data_aux_iter = iter(dataloader_aux)
+        data_primary_iter = iter(dataloader_primary)
         loss_label_classifier = torch.nn.CrossEntropyLoss()
         loss_domain_classifier = torch.nn.CrossEntropyLoss()
 
-        running_loss_label_src = 0
+        running_loss_label_primary = 0
 
         model.train()
         for i in range(1, len_dataloader + 1):
 
-            # Training with source data
-            data_source = data_source_iter.next()
-            src_img, src_label = data_source
-            src_img, src_label = src_img.to(device), src_label.to(device)
+            # Training with primary data
+            data_primary = data_primary_iter.next()
+            primary_img, primary_label = data_primary
+            primary_img, primary_label = (
+                primary_img.to(device),
+                primary_label.to(device),
+            )
             model.zero_grad()
-            src_domain = torch.zeros_like(src_label)
-            src_domain = src_domain.to(device)
-            class_output, domain_output = model(src_img)
+            primary_domain = torch.zeros_like(primary_label)
+            primary_domain = primary_domain.to(device)
+            class_output, domain_output = model(primary_img)
             preds = class_output.argmax(dim=1)
-            batch_acc_train = preds.eq(src_label).sum().item() / src_label.size(0)
+            batch_acc_train = preds.eq(primary_label).sum().item() / primary_label.size(
+                0
+            )
             domain_preds = domain_output.argmax(dim=1)
-            batch_acc_domain_src = domain_preds.eq(
-                src_domain
-            ).sum().item() / src_domain.size(0)
+            batch_acc_domain_primary = domain_preds.eq(
+                primary_domain
+            ).sum().item() / primary_domain.size(0)
 
-            err_src_label = loss_label_classifier(class_output, src_label)
-            running_loss_label_src += err_src_label.data.cpu().item()
-            err_src_domain = loss_domain_classifier(domain_output, src_domain)
+            loss_primary_label = loss_label_classifier(class_output, primary_label)
+            running_loss_label_primary += loss_primary_label.data.cpu().item()
+            loss_primary_domain = loss_domain_classifier(domain_output, primary_domain)
 
-            # Training with target data
-            err_tgt_domain = torch.FloatTensor(1).fill_(0)
-            batch_acc_domain_tgt = 0
-            if data_loader_target is not None and args.mode == "dann":
-                data_target = data_target_iter.next()
-                tgt_img, tgt_label = data_target
-                tgt_img, tgt_label = tgt_img.to(device), tgt_label.to(device)
-                tgt_domain = torch.ones_like(tgt_label)
-                tgt_domain = tgt_domain.to(device)
-                _, domain_output = model(tgt_img)
+            # Training with auxiliary data
+            loss_aux_domain = torch.FloatTensor(1).fill_(0)
+            batch_acc_domain_aux = 0
+            if dataloader_aux is not None and args.mode == "dann":
+                data_aux = data_aux_iter.next()
+                aux_img, aux_label = data_aux
+                aux_img, aux_label = aux_img.to(device), aux_label.to(device)
+                aux_domain = torch.ones_like(aux_label)
+                aux_domain = aux_domain.to(device)
+                _, domain_output = model(aux_img)
                 domain_preds = domain_output.argmax(dim=1)
-                batch_acc_domain_tgt = domain_preds.eq(
-                    tgt_domain
-                ).sum().item() / tgt_domain.size(0)
-                err_tgt_domain = loss_domain_classifier(domain_output, tgt_domain)
+                batch_acc_domain_aux = domain_preds.eq(
+                    aux_domain
+                ).sum().item() / aux_domain.size(0)
+                loss_aux_domain = loss_domain_classifier(domain_output, aux_domain)
 
             if args.mode == "dann":
-                err = err_src_label + err_tgt_domain + err_src_domain
+                loss = loss_primary_label + loss_aux_domain + loss_primary_domain
             else:
-                err = err_src_label
-            err.backward()
+                loss = loss_primary_label
+            loss.backward()
             optimizer.step()
 
             print(
-                "epoch: %d, [iter: %d / all %d], err_src_label: %f, err_src_domain: %f, err_tgt_domain: %f, b_acc: %f, b_acc_domain_src: %f, b_acc_domain_tgt: %f"
+                "epoch: %d, [iter: %d / all %d], loss_primary_label: %f, loss_primary_domain: %f, loss_aux_domain: %f, acc_primary_label_batch: %f, acc_primary_domain_batch: %f, acc_aux_domain_batch: %f"
                 % (
                     epoch,
                     i,
                     len_dataloader,
-                    err_src_label.data.cpu().item(),
-                    err_src_domain.data.cpu().item(),
-                    err_tgt_domain.data.cpu().item(),
+                    loss_primary_label.data.cpu().item(),
+                    loss_primary_domain.data.cpu().item(),
+                    loss_aux_domain.data.cpu().item(),
                     batch_acc_train,
-                    batch_acc_domain_src,
-                    batch_acc_domain_tgt,
+                    batch_acc_domain_primary,
+                    batch_acc_domain_aux,
                 )
             )
             wandb.log(
                 {
-                    "loss_src_label": err_src_label.data.cpu().item(),
-                    "loss_src_domain": err_src_domain.data.cpu().item(),
-                    "loss_tgt_domain": err_tgt_domain.data.cpu().item(),
-                    "batch_acc_train": batch_acc_train,
-                    "batch_acc_domain_src": batch_acc_domain_src,
-                    "batch_acc_domain_tgt": batch_acc_domain_tgt,
+                    "loss_primary_label": loss_primary_label.data.cpu().item(),
+                    "loss_primary_domain": loss_primary_domain.data.cpu().item(),
+                    "loss_aux_domain": loss_aux_domain.data.cpu().item(),
+                    "acc_primary_label_batch": batch_acc_train,
+                    "acc_primary_domain_batch": batch_acc_domain_primary,
+                    "acc_aux_domain_batch": batch_acc_domain_aux,
                 }
             )
 
-        epoch_loss_label_src = running_loss_label_src / len_dataloader
-        print("epoch: %d, err_src_label: %f" % (epoch, epoch_loss_label_src))
+        epoch_loss_label_primary = running_loss_label_primary / len_dataloader
+        print("epoch: %d, loss_primary_label: %f" % (epoch, epoch_loss_label_primary))
 
-        if data_loader_val is not None:
-            acc = test(model, data_loader_val)
+        if dataloader_val is not None:
+            acc = test(model, dataloader_val)
             val_acc_history.append(acc)
 
-        if epoch_loss_label_src < best_epoch_loss_label_src:
-            best_epoch_loss_label_src = epoch_loss_label_src
+        if epoch_loss_label_primary < best_epoch_loss_label_primary:
+            best_epoch_loss_label_primary = epoch_loss_label_primary
             save_checkpoint(
                 checkpoint_dir=args.checkpoint_dir,
                 run_name=args.run_name,
                 checkpoint_name="best.pt",
                 model=model,
                 epoch=epoch,
-                loss=best_epoch_loss_label_src,
+                loss=best_epoch_loss_label_primary,
                 optimizer=optimizer,
                 args=args,
             )
@@ -252,14 +257,14 @@ def train(
             model=model,
             optimizer=optimizer,
             epoch=epoch,
-            loss=best_epoch_loss_label_src,
+            loss=best_epoch_loss_label_primary,
             args=args,
         )
 
     return model, val_acc_history
 
 
-def test(model, data_loader):
+def test(model, dataloader):
     """Test model"""
     model.eval()
     loss_label_classifier = torch.nn.CrossEntropyLoss(reduction="sum")
@@ -267,18 +272,18 @@ def test(model, data_loader):
     correct = 0
     preds = []
     with torch.no_grad():
-        for data, target in data_loader:
-            data, target = data.to(device), target.to(device)
+        for data, label in dataloader:
+            data, label = data.to(device), label.to(device)
             class_output, _ = model(data)
-            test_loss += loss_label_classifier(class_output, target).item()
+            test_loss += loss_label_classifier(class_output, label).item()
             pred = class_output.argmax(dim=1)
             preds.extend(pred.tolist())
-            correct += pred.eq(target).sum().item()
-    test_loss /= len(data_loader.dataset)
-    acc = correct / len(data_loader.dataset)
+            correct += pred.eq(label).sum().item()
+    test_loss /= len(dataloader.dataset)
+    acc = correct / len(dataloader.dataset)
     print(
         "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.4f})\n".format(
-            test_loss, correct, len(data_loader.dataset), acc,
+            test_loss, correct, len(dataloader.dataset), acc,
         )
     )
 
@@ -310,7 +315,7 @@ if __name__ == "__main__":
         help="Which feature extractor to use? (default: resnet18)",
     )
     parser.add_argument(
-        "--num_classes",
+        "--num-classes",
         type=int,
         default=10,
         metavar="N",
@@ -424,33 +429,28 @@ if __name__ == "__main__":
         "--checkpoint", type=str,
     )
     parser.add_argument(
-        "--data-dir-train-source",
+        "--data-dir-train-primary",
         type=str,
-        action='append',
-        default=os.environ["SM_CHANNEL_SOURCE_TRAIN"]
-        if "SM_CHANNEL_SOURCE_TRAIN" in os.environ
+        action="append",
+        default=os.environ["SM_CHANNEL_PRIMARY_TRAIN"]
+        if "SM_CHANNEL_PRIMARY_TRAIN" in os.environ
         else None,
     )
     parser.add_argument(
-        "--data-dir-train-target",
+        "--data-dir-train-aux",
         type=str,
-        action='append',
-        default=os.environ["SM_CHANNEL_TARGET_TRAIN"]
-        if "SM_CHANNEL_TARGET_TRAIN" in os.environ
+        action="append",
+        default=os.environ["SM_CHANNEL_AUX_TRAIN"]
+        if "SM_CHANNEL_AUX_TRAIN" in os.environ
         else None,
     )
     parser.add_argument(
         "--data-dir-val",
-        action='append',
+        action="append",
         type=str,
         default=os.environ["SM_CHANNEL_VAL"]
         if "SM_CHANNEL_VAL" in os.environ
         else None,
-    )
-    parser.add_argument(
-        "--num-gpus",
-        type=int,
-        default=os.environ["SM_NUM_GPUS"] if "SM_NUM_GPUS" in os.environ else None,
     )
     parser.add_argument(
         "-j",

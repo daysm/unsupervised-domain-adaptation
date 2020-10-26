@@ -23,7 +23,7 @@ class ConcatDataset(torch.utils.data.ConcatDataset):
         super().__init__(datasets)
         self.targets = []
         for dataset in self.datasets:
-            self.targets.extend(dataset.targets) 
+            self.targets.extend(dataset.targets)
 
 
 def get_dataloader(
@@ -109,15 +109,11 @@ if __name__ == "__main__":
     )
 
     dataloader = get_dataloader(
-        ["data/real_new_for_model_classification_cropped_cleaned_test_set", "data/real_new_for_model_classification_cropped_cleaned_training_set"],
+        [
+            "data/real_new_for_model_classification_cropped_cleaned_test_set",
+            "data/real_new_for_model_classification_cropped_cleaned_training_set",
+        ],
         data_transforms,
         batch_size=32,
         weighted_sampling=True,
-        # num_samples=1000
     )
-    # labels = []
-    # for batch in dataloader:
-    #     labels.extend(batch[1].tolist())
-    # print(labels)
-    # for i in range(10):
-    #     print(labels.count(i))
