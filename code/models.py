@@ -125,6 +125,14 @@ class FeatureExtractorMNIST(nn.Module):
 
         self.num_features = 800
 
+        self.freeze_feature_extractor = freeze_feature_extractor
+        if self.freeze_feature_extractor:
+            self._freeze_feature_extractor()
+
+    def _freeze_feature_extractor(self):
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = False
+
     def forward(self, x):
         return self.feature_extractor(x)
 

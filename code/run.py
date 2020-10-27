@@ -39,7 +39,7 @@ def main(args):
     print(args)
     model = ImageClassifier(
         feature_extractor_name=args.feature_extractor,
-        freeze_feature_extractor=args.freeze_feature_extractor,
+        freeze_feature_extractor=args.feature_extractor_weights == "freeze",
         pretrained=True,
         num_classes=args.num_classes,
     )
@@ -66,9 +66,9 @@ def main(args):
     dataloader_primary_train = None
     if args.data_dir_train_primary:
         dataloader_primary_train = get_dataloader(
-            args.data_dir_train_primary,
-            data_transforms,
-            args.batch_size,
+            data_dir=args.data_dir_train_primary,
+            data_transforms=data_transforms,
+            batch_size=args.batch_size,
             weighted_sampling=True,
             num_workers=args.workers,
         )
@@ -331,10 +331,10 @@ if __name__ == "__main__":
             source: train on primary domain (default: dann)""",
     )
     parser.add_argument(
-        "--freeze-feature-extractor",
-        action="store_true",
-        default=False,
-        help="""Freeze feature extractor""",
+        "--feature-extractor-weights",
+        type=str,
+        default="freeze",
+        help="""Freeze or train (finetune) feature extractor""",
     )
     parser.add_argument(
         "--batch-size",

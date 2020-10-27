@@ -18,8 +18,8 @@ class DaimlerImageFolder(datasets.ImageFolder):
 
 
 def get_dataloader(
-    data_dir,
-    data_transforms,
+    data_dir=None,
+    data_transforms=None,
     batch_size=32,
     weighted_sampling=False,
     num_samples=None,
