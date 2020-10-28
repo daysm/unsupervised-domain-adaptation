@@ -17,6 +17,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 from torchvision import datasets, transforms
 from torchsummary import summary
+from sklearn.metrics import confusion_matrix, classification_report
 import wandb
 from dotenv import load_dotenv
 
@@ -36,7 +37,6 @@ load_dotenv(dotenv_path)
 
 def main(args):
     """Train and evaluate a ResNet18 car model classifier"""
-    print(args)
     model = ImageClassifier(
         feature_extractor_name=args.feature_extractor,
         freeze_feature_extractor=args.feature_extractor_weights == "freeze",
@@ -272,23 +272,26 @@ def test(model, dataloader):
     loss_label_classifier = torch.nn.CrossEntropyLoss(reduction="sum")
     test_loss = 0
     correct = 0
-    preds = []
+    all_labels = []
+    all_preds = []
     with torch.no_grad():
-        for data, label in dataloader:
+        for i, (data, label) in enumerate(dataloader):
             data, label = data.to(device), label.to(device)
             class_output, _ = model(data)
             test_loss += loss_label_classifier(class_output, label).item()
-            pred = class_output.argmax(dim=1)
-            preds.extend(pred.tolist())
-            correct += pred.eq(label).sum().item()
+            preds = class_output.argmax(dim=1)
+            all_preds.extend(preds.tolist())
+            all_labels.extend(label.tolist())
+            correct += preds.eq(label).sum().item()
     test_loss /= len(dataloader.dataset)
     acc = correct / len(dataloader.dataset)
-    print(
-        "\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.4f})\n".format(
-            test_loss, correct, len(dataloader.dataset), acc,
-        )
-    )
-
+    class_names = list(dataloader.dataset.class_to_idx.keys())
+    cf_matrix = confusion_matrix(all_labels, all_preds)
+    print(cf_matrix)
+    report_text = classification_report(all_labels, all_preds, target_names=class_names)
+    report_dict = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True)
+    print(report_text)
+    print(report_dict)
     return acc
 
 
@@ -432,16 +435,16 @@ if __name__ == "__main__":
         "--data-dir-train-primary",
         type=str,
         # action="append",
-        default=os.environ["SM_CHANNEL_PRIMARY_TRAIN"]
-        if "SM_CHANNEL_PRIMARY_TRAIN" in os.environ
+        default=os.environ["SM_CHANNEL_TRAIN_PRIMARY"]
+        if "SM_CHANNEL_TRAIN_PRIMARY" in os.environ
         else None,
     )
     parser.add_argument(
         "--data-dir-train-aux",
         type=str,
         # action="append",
-        default=os.environ["SM_CHANNEL_AUX_TRAIN"]
-        if "SM_CHANNEL_AUX_TRAIN" in os.environ
+        default=os.environ["SM_CHANNEL_TRAIN_AUX"]
+        if "SM_CHANNEL_TRAIN_AUX" in os.environ
         else None,
     )
     parser.add_argument(
@@ -462,3 +465,13 @@ if __name__ == "__main__":
     )
 
     main(parser.parse_args())
+
+    # class_names = ['1179', '1569', '1671', '1770', '2050', '2054', '2130', '2470', '2533', '2539']
+    # all_labels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]
+    # all_preds = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 3, 6, 6, 0, 3, 3, 3, 3, 7, 1, 1, 9, 2, 2, 2, 7, 2, 2, 2, 0, 3, 3, 7, 0, 3, 0, 3, 3, 3, 3, 3, 3, 3, 3, 7, 3, 3, 7, 1, 3, 3, 3, 3, 3, 7, 3, 3, 3, 3, 3, 3, 7, 3, 0, 7, 7, 0, 4, 4, 5, 6, 5, 0, 0, 5, 5, 4, 4, 7, 4, 4, 4, 1, 7, 6, 4, 4, 4, 4, 4, 6, 6, 6, 6, 3, 0, 4, 4, 4, 7, 7, 7, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 3, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 9, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 1, 8, 8, 8, 7, 0, 9, 9, 3, 9, 9, 8, 9, 9, 9, 9, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 0, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 2, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 0, 9, 9, 9, 9, 9, 9, 7, 9, 9]
+    # cf_matrix = confusion_matrix(all_labels, all_preds)
+    # print(cf_matrix)
+    # report_text = classification_report(all_labels, all_preds, labels=class_names, target_names=class_names)
+    # report_dict = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True)
+    # print(report_text)
+    # print(report_dict)
