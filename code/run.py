@@ -158,7 +158,6 @@ def train(
 
         model.train()
         for i in range(1, len_dataloader + 1):
-
             # Training with primary data
             data_primary = data_primary_iter.next()
             primary_img, primary_label = data_primary
@@ -288,8 +287,8 @@ def test(model, dataloader):
     class_names = list(dataloader.dataset.class_to_idx.keys())
     cf_matrix = confusion_matrix(all_labels, all_preds)
     print(cf_matrix)
-    report_text = classification_report(all_labels, all_preds, target_names=class_names)
-    report_dict = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True)
+    report_text = classification_report(all_labels, all_preds, target_names=class_names, zero_division=0)
+    report_dict = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True, zero_division=0 )
     print(report_text)
     print(report_dict)
     return acc
