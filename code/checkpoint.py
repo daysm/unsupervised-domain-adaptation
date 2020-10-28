@@ -66,7 +66,7 @@ def load_checkpoint(checkpoint, model, optimizer):
     checkpoint is the path of the checkpoint
     """
     logger.info("Loading checkpoint")
-    checkpoint = torch.load(checkpoint)
+    checkpoint = torch.load(checkpoint, map_location=lambda storage, loc: storage)
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     epoch = checkpoint["epoch"]
