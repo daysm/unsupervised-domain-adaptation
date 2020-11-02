@@ -236,9 +236,15 @@ def train(
 
         if dataloader_val is not None:
             val_loss, val_acc = test(model, dataloader_val)
+            print(
+                "val_loss: %f, val_acc: %f"
+                % (
+                    val_loss, val_acc
+                )
+            )
             wandb.log(
                 {
-                    "val_loss__label": val_loss,
+                    "val_loss_label": val_loss,
                     "val_acc_label": val_acc,
                 }
             )
