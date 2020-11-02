@@ -248,7 +248,7 @@ def train(
                     "val_acc_label": val_acc,
                 }
             )
-            val_acc_history.append(acc)
+            val_acc_history.append(val_acc)
             if val_acc > best_acc:
                 best_acc = val_acc
 
