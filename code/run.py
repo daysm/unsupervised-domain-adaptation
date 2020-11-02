@@ -126,7 +126,8 @@ def main(args):
         )
 
     if dataloader_primary_train is None and dataloader_val is not None:
-        acc = test(model, dataloader_val)
+        test_loss, acc = test(model, dataloader_val)
+
 
 
 def train(
@@ -234,10 +235,16 @@ def train(
         print("epoch: %d, loss_primary_label: %f" % (epoch, epoch_loss_label_primary))
 
         if dataloader_val is not None:
-            acc = test(model, dataloader_val)
+            val_loss, val_acc = test(model, dataloader_val)
+            wandb.log(
+                {
+                    "val_loss__label": val_loss,
+                    "val_acc_label": val_acc,
+                }
+            )
             val_acc_history.append(acc)
-            if acc > best_acc:
-                best_acc = acc
+            if val_acc > best_acc:
+                best_acc = val_acc
 
         if epoch_loss_label_primary < best_epoch_loss_label_primary:
             best_epoch_loss_label_primary = epoch_loss_label_primary
@@ -275,6 +282,7 @@ def test(model, dataloader):
     all_preds = []
     with torch.no_grad():
         for i, (data, label) in enumerate(dataloader):
+            print(i)
             data, label = data.to(device), label.to(device)
             class_output, _ = model(data)
             test_loss += loss_label_classifier(class_output, label).item()
@@ -284,14 +292,21 @@ def test(model, dataloader):
             correct += preds.eq(label).sum().item()
     test_loss /= len(dataloader.dataset)
     acc = correct / len(dataloader.dataset)
+    print(
+        "val_loss_label: %f,  val_acc_label: %f"
+        % (
+            test_loss,
+            acc
+        )
+    )
     class_names = list(dataloader.dataset.class_to_idx.keys())
-    cf_matrix = confusion_matrix(all_labels, all_preds)
-    print(cf_matrix)
+    cm = confusion_matrix(all_labels, all_preds)
+    print(cm)
     report_text = classification_report(all_labels, all_preds, target_names=class_names, zero_division=0)
     report_dict = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True, zero_division=0 )
     print(report_text)
     print(report_dict)
-    return acc
+    return test_loss, acc
 
 
 if __name__ == "__main__":
