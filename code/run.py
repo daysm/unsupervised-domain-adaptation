@@ -25,10 +25,8 @@ from models import ImageClassifier
 from data import get_dataloader
 from checkpoint import model_fn, save_model, load_checkpoint, save_checkpoint
 
-
-# Torch setup
+# Use GPU, if available
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-torch.manual_seed(0)
 
 # Load .env (for WandB API key)
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -37,6 +35,8 @@ load_dotenv(dotenv_path)
 
 def main(args):
     """Train and evaluate a ResNet18 car model classifier"""
+    torch.manual_seed(args.seed)
+
     model = ImageClassifier(
         feature_extractor_name=args.feature_extractor,
         freeze_feature_extractor=args.feature_extractor_weights == "freeze",
@@ -98,6 +98,7 @@ def main(args):
         [param for param in model.parameters() if param.requires_grad == True],
         lr=args.lr,
         momentum=args.momentum,
+        weight_decay=args.weight_decay
     )
 
     now = datetime.now()
@@ -206,20 +207,21 @@ def train(
             loss.backward()
             optimizer.step()
 
-            print(
-                "epoch: %d, [iter: %d / all %d], loss_primary_label: %f, loss_primary_domain: %f, loss_aux_domain: %f, acc_primary_label_batch: %f, acc_primary_domain_batch: %f, acc_aux_domain_batch: %f"
-                % (
-                    epoch,
-                    i,
-                    len_dataloader,
-                    loss_primary_label.data.cpu().item(),
-                    loss_primary_domain.data.cpu().item(),
-                    loss_aux_domain.data.cpu().item(),
-                    batch_acc_train,
-                    batch_acc_domain_primary,
-                    batch_acc_domain_aux,
+            if i % args.log_interval == 0:
+                print(
+                    "epoch: %d, [iter: %d / all %d], loss_primary_label: %f, loss_primary_domain: %f, loss_aux_domain: %f, acc_primary_label_batch: %f, acc_primary_domain_batch: %f, acc_aux_domain_batch: %f"
+                    % (
+                        epoch,
+                        i,
+                        len_dataloader,
+                        loss_primary_label.data.cpu().item(),
+                        loss_primary_domain.data.cpu().item(),
+                        loss_aux_domain.data.cpu().item(),
+                        batch_acc_train,
+                        batch_acc_domain_primary,
+                        batch_acc_domain_aux,
+                    )
                 )
-            )
             wandb.log(
                 {
                     "loss_primary_label": loss_primary_label.data.cpu().item(),
@@ -390,7 +392,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lr",
         type=float,
-        default=0.001,
+        default=0.01,
         metavar="LR",
         help="learning rate (default: 0.001)",
     )
@@ -400,6 +402,13 @@ if __name__ == "__main__":
         default=0.9,
         metavar="M",
         help="SGD momentum (default: 0.9)",
+    )
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=0.001,
+        metavar="L2",
+        help="L2 regularization (default: 0.9)",
     )
     parser.add_argument(
         "--seed", type=int, default=1, metavar="S", help="random seed (default: 1)"
