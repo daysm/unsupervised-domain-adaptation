@@ -96,6 +96,11 @@ class FeatureExtractor(nn.Module):
             self.feature_extractor = models.alexnet(pretrained=pretrained)
             self.num_features = self.feature_extractor.classifier[6].in_features
             self.feature_extractor.classifier[6] = Identity()
+        self.bottleneck = nn.Sequential(
+            nn.Linear(self.num_features, 256),
+            nn.ReLU()
+        )
+        self.num_features = 256
         self.freeze_feature_extractor = freeze_feature_extractor
         if self.freeze_feature_extractor:
             self._freeze_feature_extractor()
@@ -105,7 +110,9 @@ class FeatureExtractor(nn.Module):
             param.requires_grad = False
 
     def forward(self, x):
-        return self.feature_extractor(x)
+        x = self.feature_extractor(x)
+        x = self.bottleneck(x)
+        return x
 
 
 class FeatureExtractorMNIST(nn.Module):
