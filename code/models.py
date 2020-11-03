@@ -40,7 +40,7 @@ class LabelClassifier(nn.Module):
                     ("c_fc1", nn.Linear(self.num_ftrs, 100)),
                     ("c_bn1", nn.BatchNorm1d(100)),
                     ("c_relu1", nn.ReLU()),
-                    ("c_drop1", nn.Dropout2d()),
+                    ("c_drop1", nn.Dropout()),
                     ("c_fc2", nn.Linear(100, 100)),
                     ("c_bn2", nn.BatchNorm1d(100)),
                     ("c_relu2", nn.ReLU()),
