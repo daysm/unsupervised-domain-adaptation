@@ -416,7 +416,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--log-interval",
         type=int,
-        default=100,
+        default=1,
         metavar="N",
         help="how many batches to wait before logging training status (default: 100)",
     )
